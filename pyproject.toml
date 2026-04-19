@@ -1,0 +1,119 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "venice-sdk"
+version = "0.1.0"
+description = "Typed, async-first Python client for the Venice.ai API."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "balresch" }]
+keywords = ["venice", "venice.ai", "llm", "api", "sdk", "async"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "typing-extensions>=4.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "datamodel-code-generator>=0.25",
+]
+
+[project.urls]
+Homepage = "https://github.com/balresch/venice-sdk"
+Repository = "https://github.com/balresch/venice-sdk"
+Issues = "https://github.com/balresch/venice-sdk/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/venice_sdk"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/",
+    "vendor/",
+    "scripts/",
+    "tests/",
+    "README.md",
+    "LICENSE",
+    "PLAN.md",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle + pyflakes
+    "I",             # isort
+    "B",             # bugbear
+    "UP",            # pyupgrade
+    "SIM",           # simplify
+    "RUF",           # ruff-specific
+]
+ignore = [
+    "E501",  # line too long — handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/venice_sdk/_generated.py" = ["ALL"]
+"tests/**" = ["B"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src/venice_sdk"]
+exclude = ["src/venice_sdk/_generated\\.py$"]
+
+[[tool.mypy.overrides]]
+module = "venice_sdk._generated"
+ignore_errors = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--ignore=tests/integration",
+]
+markers = [
+    "integration: hits the real Venice API (requires VENICE_API_KEY)",
+]
+
+[tool.coverage.run]
+source = ["src/venice_sdk"]
+omit = ["src/venice_sdk/_generated.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]
