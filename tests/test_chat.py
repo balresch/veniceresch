@@ -23,7 +23,8 @@ async def test_create_posts_to_chat_completions(mock_api, async_client):
         model="llama-3.3-70b",
         messages=[{"role": "user", "content": "hello"}],
     )
-    assert result["id"] == "cmpl-1"
+    assert result.id == "cmpl-1"
+    assert result.choices[0]["message"]["content"] == "hi"
     body = json.loads(route.calls.last.request.content)
     assert body == {
         "model": "llama-3.3-70b",
@@ -61,6 +62,25 @@ async def test_create_forwards_openai_compatible_fields(mock_api, async_client):
     assert "stream" not in body  # non-streaming
 
 
+async def test_response_tolerates_unknown_fields(mock_api, async_client):
+    # Venice adds fields frequently; the client must not raise on them.
+    # Known fields are accessible as attributes; unknown fields land in
+    # model_extra via ConfigDict(extra="allow") on VeniceBaseModel.
+    mock_api.post("/chat/completions").respond(
+        200,
+        json={
+            "id": "x",
+            "choices": [],
+            "brand_new_venice_field": {"shipped_today": True},
+        },
+    )
+    result = await async_client.chat.create(
+        model="m", messages=[{"role": "user", "content": "h"}]
+    )
+    assert result.id == "x"
+    assert result.model_extra == {"brand_new_venice_field": {"shipped_today": True}}
+
+
 async def test_create_drops_none_extras(mock_api, async_client):
     route = mock_api.post("/chat/completions").respond(200, json={"id": "x"})
     await async_client.chat.create(
@@ -73,9 +93,9 @@ async def test_create_drops_none_extras(mock_api, async_client):
 
 
 async def test_create_stream_true_returns_iterator(mock_api, async_client):
-    # stream=True returns an async iterator (not a dict). Requires await before
-    # async for — same contract as OpenAI's SDK.
-    sse_body = b'data: {"n":1}\n\ndata: {"n":2}\n\ndata: [DONE]\n\n'
+    # stream=True returns an async iterator of ChatCompletionChunk. Requires
+    # await before async for — same contract as OpenAI's SDK.
+    sse_body = b'data: {"id":"a"}\n\ndata: {"id":"b"}\n\ndata: [DONE]\n\n'
     mock_api.post("/chat/completions").respond(
         200, content=sse_body, headers={"content-type": "text/event-stream"}
     )
@@ -83,12 +103,12 @@ async def test_create_stream_true_returns_iterator(mock_api, async_client):
         model="m", messages=[{"role": "user", "content": "h"}], stream=True
     )
     events = [event async for event in stream]
-    assert events == [{"n": 1}, {"n": 2}]
+    assert [e.id for e in events] == ["a", "b"]
 
 
 async def test_create_stream_true_matches_stream_method(mock_api, async_client):
     # create(stream=True) and stream() should decode the same events.
-    sse_body = b'data: {"a":1}\n\ndata: {"b":2}\n\ndata: [DONE]\n\n'
+    sse_body = b'data: {"id":"a"}\n\ndata: {"id":"b"}\n\ndata: [DONE]\n\n'
     mock_api.post("/chat/completions").respond(
         200, content=sse_body, headers={"content-type": "text/event-stream"}
     )
@@ -108,7 +128,7 @@ async def test_create_stream_true_matches_stream_method(mock_api, async_client):
             model="m", messages=[{"role": "user", "content": "h"}]
         )
     ]
-    assert via_create == via_stream == [{"a": 1}, {"b": 2}]
+    assert [e.id for e in via_create] == [e.id for e in via_stream] == ["a", "b"]
 
 
 async def test_create_supports_vision_and_audio_parts(mock_api, async_client):
@@ -152,8 +172,8 @@ async def test_stream_parses_sse_events(mock_api, async_client):
     async for event in stream:
         events.append(event)
     assert len(events) == 2
-    assert events[0]["choices"][0]["delta"]["content"] == "He"
-    assert events[1]["choices"][0]["delta"]["content"] == "llo"
+    assert events[0].choices[0]["delta"]["content"] == "He"
+    assert events[1].choices[0]["delta"]["content"] == "llo"
 
 
 async def test_stream_sends_stream_true(mock_api, async_client):
@@ -200,7 +220,7 @@ async def test_stream_handles_split_chunks(mock_api, async_client):
     )
     async for event in stream:
         events.append(event)
-    assert [e["n"] for e in events] == [1, 2]
+    assert [e.id for e in events] == ["a", "b"]
 
 
 async def test_stream_ignores_comments_and_unknown_fields(mock_api, async_client):
@@ -215,19 +235,31 @@ async def test_stream_ignores_comments_and_unknown_fields(mock_api, async_client
         messages=[{"role": "user", "content": "h"}],
     )
     events = [e async for e in stream]
-    assert events == [{"n": 42}]
+    assert len(events) == 1
+    # "n":42 arrives as an extra field thanks to extra=allow on the base model.
+    assert events[0].model_extra == {"n": 42}
 
 
 # ---- /responses endpoint --------------------------------------------------
 
 
 async def test_create_response(mock_api, async_client):
-    route = mock_api.post("/responses").respond(200, json={"id": "resp-1", "output": "hello"})
+    route = mock_api.post("/responses").respond(
+        200,
+        json={
+            "id": "resp-1",
+            "object": "response",
+            "created_at": 1700000000,
+            "status": "completed",
+            "model": "m",
+            "output": [],
+        },
+    )
     result = await async_client.chat.create_response(
         model="m",
         input=[{"role": "user", "content": "hi"}],
     )
-    assert result["id"] == "resp-1"
+    assert result.id == "resp-1"
     body = json.loads(route.calls.last.request.content)
     assert body["model"] == "m"
     assert body["input"] == [{"role": "user", "content": "hi"}]
@@ -242,13 +274,13 @@ def test_sync_create(mock_api, sync_client):
         model="m",
         messages=[{"role": "user", "content": "h"}],
     )
-    assert result["id"] == "x"
+    assert result.id == "x"
 
 
 def test_sync_stream(mock_api, sync_client):
     mock_api.post("/chat/completions").respond(
         200,
-        content=b'data: {"n":1}\n\ndata: [DONE]\n\n',
+        content=b'data: {"id":"s1"}\n\ndata: [DONE]\n\n',
         headers={"content-type": "text/event-stream"},
     )
     events = list(
@@ -257,7 +289,7 @@ def test_sync_stream(mock_api, sync_client):
             messages=[{"role": "user", "content": "h"}],
         )
     )
-    assert events == [{"n": 1}]
+    assert [e.id for e in events] == ["s1"]
 
 
 # ---- chat resource available via attribute on client ---------------------
@@ -293,17 +325,17 @@ async def test_completions_create_matches_chat_create(mock_api, async_client):
     )
     body_chat = json.loads(route.calls.last.request.content)
 
-    assert via_completions == via_chat
+    assert via_completions.id == via_chat.id == "x"
     assert body_completions == body_chat
 
 
 async def test_completions_stream_matches_chat_stream(mock_api, async_client):
-    sse_body = b'data: {"k":1}\n\ndata: [DONE]\n\n'
+    sse_body = b'data: {"id":"ev"}\n\ndata: [DONE]\n\n'
     mock_api.post("/chat/completions").respond(
         200, content=sse_body, headers={"content-type": "text/event-stream"}
     )
-    events_via_completions = [
-        e
+    via_completions = [
+        e.id
         async for e in await async_client.chat.completions.stream(
             model="m", messages=[{"role": "user", "content": "h"}]
         )
@@ -312,17 +344,17 @@ async def test_completions_stream_matches_chat_stream(mock_api, async_client):
     mock_api.post("/chat/completions").respond(
         200, content=sse_body, headers={"content-type": "text/event-stream"}
     )
-    events_via_chat = [
-        e
+    via_chat = [
+        e.id
         async for e in await async_client.chat.stream(
             model="m", messages=[{"role": "user", "content": "h"}]
         )
     ]
-    assert events_via_completions == events_via_chat == [{"k": 1}]
+    assert via_completions == via_chat == ["ev"]
 
 
 async def test_completions_create_stream_true(mock_api, async_client):
-    sse_body = b'data: {"k":2}\n\ndata: [DONE]\n\n'
+    sse_body = b'data: {"id":"ev2"}\n\ndata: [DONE]\n\n'
     mock_api.post("/chat/completions").respond(
         200, content=sse_body, headers={"content-type": "text/event-stream"}
     )
@@ -330,23 +362,21 @@ async def test_completions_create_stream_true(mock_api, async_client):
         model="m", messages=[{"role": "user", "content": "h"}], stream=True
     )
     events = [e async for e in stream]
-    assert events == [{"k": 2}]
+    assert [e.id for e in events] == ["ev2"]
 
 
 def test_sync_completions_create(mock_api, sync_client):
     mock_api.post("/chat/completions").respond(200, json={"id": "sx"})
-    assert (
-        sync_client.chat.completions.create(model="m", messages=[{"role": "user", "content": "h"}])[
-            "id"
-        ]
-        == "sx"
+    result = sync_client.chat.completions.create(
+        model="m", messages=[{"role": "user", "content": "h"}]
     )
+    assert result.id == "sx"
 
 
 def test_sync_completions_stream_true(mock_api, sync_client):
     mock_api.post("/chat/completions").respond(
         200,
-        content=b'data: {"k":3}\n\ndata: [DONE]\n\n',
+        content=b'data: {"id":"s3"}\n\ndata: [DONE]\n\n',
         headers={"content-type": "text/event-stream"},
     )
     events = list(
@@ -354,4 +384,4 @@ def test_sync_completions_stream_true(mock_api, sync_client):
             model="m", messages=[{"role": "user", "content": "h"}], stream=True
         )
     )
-    assert events == [{"k": 3}]
+    assert [e.id for e in events] == ["s3"]

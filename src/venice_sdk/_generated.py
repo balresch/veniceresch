@@ -47,9 +47,6 @@ class Code(Enum):
 
 
 class TopUpInstructions(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     step1: Annotated[
         str,
         Field(
@@ -99,9 +96,6 @@ class TopUpInstructions(VeniceBaseModel):
 
 
 class SiwxChallenge(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     domain: Annotated[
         str,
         Field(description="Domain for the SIWX challenge.", examples=["api.venice.ai"]),
@@ -780,9 +774,6 @@ class Type14(Enum):
 
 
 class ResponseFormat(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     json_schema: dict[str, Any]
     type: Type14
 
@@ -792,9 +783,6 @@ class Type15(Enum):
 
 
 class ResponseFormat1(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     type: Type15
 
 
@@ -803,9 +791,6 @@ class Type16(Enum):
 
 
 class ResponseFormat2(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     type: Type16
 
 
@@ -847,9 +832,6 @@ class Tools1(VeniceBaseModel):
 
 
 class ChatCompletionRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     frequency_penalty: Annotated[
         float | None,
         Field(
@@ -1719,9 +1701,6 @@ class Format2(Enum):
 
 
 class GenerateImageRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     cfg_scale: Annotated[
         float | None,
         Field(
@@ -1917,9 +1896,6 @@ class Style(Enum):
 
 
 class SimpleGenerateImageRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     background: Annotated[
         Background | None,
         Field(
@@ -2014,9 +1990,6 @@ class Enhance(Enum):
 
 
 class UpscaleImageRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     enhance: Annotated[
         bool | Enhance | None,
         Field(
@@ -2080,9 +2053,6 @@ class AspectRatio(Enum):
 
 
 class EditImageRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     aspect_ratio: Annotated[
         AspectRatio | None,
         Field(
@@ -2127,9 +2097,6 @@ class EditImageRequest(VeniceBaseModel):
 
 
 class MultiEditImageRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     modelId: Annotated[
         str | None,
         Field(description="The model ID to use for multi-edit.", min_length=1),
@@ -2188,9 +2155,6 @@ class MultiEditImageMultipartRequest(VeniceBaseModel):
 
 
 class BackgroundRemoveImageRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     image: Annotated[
         Any | str | None,
         Field(
@@ -2283,9 +2247,6 @@ class Model(Enum):
 
 
 class CreateEmbeddingRequestSchema(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     dimensions: Annotated[
         int | None,
         Field(
@@ -2479,9 +2440,6 @@ class Voice(Enum):
 
 
 class CreateSpeechRequestSchema(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     input: Annotated[
         str,
         Field(
@@ -2573,9 +2531,6 @@ class ResponseFormat5(Enum):
 
 
 class CreateTranscriptionRequestSchema(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     file: Annotated[
         bytes | None,
         Field(
@@ -2845,9 +2800,6 @@ class QuoteVideoRequest(VeniceBaseModel):
 
 
 class CompleteVideoRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     model: Annotated[
         str,
         Field(
@@ -2865,9 +2817,6 @@ class CompleteVideoRequest(VeniceBaseModel):
 
 
 class RetrieveVideoRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     model: Annotated[
         str,
         Field(
@@ -2892,9 +2841,6 @@ class RetrieveVideoRequest(VeniceBaseModel):
 
 
 class CreateVideoTranscriptionRequestSchema(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     url: Annotated[
         str,
         Field(
@@ -2955,9 +2901,6 @@ class DurationSeconds1(RootModel[str]):
 
 
 class QueueAudioRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     model: Annotated[
         str,
         Field(
@@ -3049,9 +2992,6 @@ class DurationSeconds3(RootModel[str]):
 
 
 class QuoteAudioRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     model: Annotated[
         str,
         Field(
@@ -3077,9 +3017,6 @@ class QuoteAudioRequest(VeniceBaseModel):
 
 
 class CompleteAudioRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     model: Annotated[
         str,
         Field(
@@ -3097,9 +3034,6 @@ class CompleteAudioRequest(VeniceBaseModel):
 
 
 class RetrieveAudioRequest(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     model: Annotated[
         str,
         Field(
@@ -3145,9 +3079,6 @@ class Balances(VeniceBaseModel):
 
 
 class BillingBalanceResponse(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     canConsume: Annotated[
         bool,
         Field(
@@ -3266,9 +3197,6 @@ class Pagination(VeniceBaseModel):
 
 
 class BillingUsageResponse(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     warningMessage: Annotated[
         str | None,
         Field(
@@ -3361,9 +3289,6 @@ class ByKeyItem(VeniceBaseModel):
 
 
 class BillingUsageAnalyticsResponse(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     lookback: Annotated[
         str,
         Field(
@@ -3468,9 +3393,6 @@ class Quantization(Enum):
 
 
 class Capabilities(VeniceBaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
     optimizedForCode: Annotated[
         bool, Field(description="Is the LLM optimized for coding?", examples=[True])
     ]

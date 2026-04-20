@@ -37,7 +37,7 @@ async def main():
             messages=[{"role": "user", "content": "Hello!"}],
             venice_parameters={"include_venice_system_prompt": False},
         )
-        print(response["choices"][0]["message"]["content"])
+        print(response.choices[0]["message"]["content"])
 
 asyncio.run(main())
 ```
@@ -63,7 +63,7 @@ stream = await client.chat.completions.create(
     stream=True,
 )
 async for event in stream:
-    delta = event["choices"][0]["delta"].get("content", "")
+    delta = event.choices[0]["delta"].get("content", "")
     print(delta, end="", flush=True)
 ```
 

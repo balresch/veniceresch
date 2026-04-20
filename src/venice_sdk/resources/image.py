@@ -17,6 +17,8 @@ import base64
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from venice_sdk.types import GenerateImageResponse, ImageStylesResponse
+
 if TYPE_CHECKING:
     from venice_sdk._client import AsyncVeniceClient, VeniceClient
 
@@ -49,14 +51,16 @@ class AsyncImageResource:
         model: str,
         prompt: str,
         **extra: Any,
-    ) -> dict[str, Any]:
-        """Generate an image. Returns a JSON dict with base64-encoded image data.
+    ) -> GenerateImageResponse:
+        """Generate an image. Returns :class:`GenerateImageResponse` with
+        base64-encoded images in ``result.images``.
 
         For raw PNG/JPEG bytes, use :meth:`generate_binary`.
         """
         body = _drop_none({"model": model, "prompt": prompt, **extra})
         body.pop("return_binary", None)  # force JSON mode on this method
-        return await self._client._request_json("POST", "/image/generate", json_body=body)
+        raw = await self._client._request_json("POST", "/image/generate", json_body=body)
+        return GenerateImageResponse.model_validate(raw)
 
     async def generate_binary(
         self,
@@ -154,9 +158,10 @@ class AsyncImageResource:
             body["image_url"] = image_url
         return await self._client._request_bytes("POST", "/image/background-remove", json_body=body)
 
-    async def list_styles(self) -> dict[str, Any]:
+    async def list_styles(self) -> ImageStylesResponse:
         """List available ``style_preset`` values for :meth:`generate`."""
-        return await self._client._request_json("GET", "/image/styles")
+        raw = await self._client._request_json("GET", "/image/styles")
+        return ImageStylesResponse.model_validate(raw)
 
 
 class ImageResource:
@@ -165,10 +170,11 @@ class ImageResource:
     def __init__(self, client: VeniceClient) -> None:
         self._client = client
 
-    def generate(self, *, model: str, prompt: str, **extra: Any) -> dict[str, Any]:
+    def generate(self, *, model: str, prompt: str, **extra: Any) -> GenerateImageResponse:
         body = _drop_none({"model": model, "prompt": prompt, **extra})
         body.pop("return_binary", None)
-        return self._client._request_json("POST", "/image/generate", json_body=body)
+        raw = self._client._request_json("POST", "/image/generate", json_body=body)
+        return GenerateImageResponse.model_validate(raw)
 
     def generate_binary(self, *, model: str, prompt: str, **extra: Any) -> bytes:
         body = _drop_none({"model": model, "prompt": prompt, **extra})
@@ -244,8 +250,9 @@ class ImageResource:
             body["image_url"] = image_url
         return self._client._request_bytes("POST", "/image/background-remove", json_body=body)
 
-    def list_styles(self) -> dict[str, Any]:
-        return self._client._request_json("GET", "/image/styles")
+    def list_styles(self) -> ImageStylesResponse:
+        raw = self._client._request_json("GET", "/image/styles")
+        return ImageStylesResponse.model_validate(raw)
 
 
 __all__ = ["AsyncImageResource", "ImageInput", "ImageResource"]

@@ -34,6 +34,24 @@ datamodel-codegen \
     --disable-timestamp \
     --custom-file-header "# AUTO-GENERATED from vendor/venice-swagger.yaml. Do not edit by hand."
 
+echo "==> Stripping per-class extra=\"forbid\" overrides"
+# datamodel-codegen emits `model_config = ConfigDict(extra="forbid")` on every
+# schema that has `additionalProperties: false` in the swagger, which shadows
+# the extra="allow" we set on VeniceBaseModel. We want Venice to be able to
+# add fields without breaking clients, so strip those overrides.
+python3 - "$OUT" <<'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path).read()
+pattern = re.compile(
+    r'    model_config = ConfigDict\(\n        extra="forbid",\n    \)\n',
+    re.MULTILINE,
+)
+new = pattern.sub("", text)
+open(path, "w").write(new)
+print(f"==> Stripped {len(pattern.findall(text))} extra=forbid overrides")
+PY
+
 echo "==> Formatting"
 ruff format "$OUT"
 

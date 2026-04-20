@@ -27,6 +27,11 @@ import httpx
 
 from venice_sdk._errors import translate_httpx_error
 from venice_sdk.resources._sse import aiter_sse_events, iter_sse_events
+from venice_sdk.types import (
+    ChatCompletionChunk,
+    ChatCompletionResponse,
+    ResponsesResponse,
+)
 
 if TYPE_CHECKING:
     from venice_sdk._client import AsyncVeniceClient, VeniceClient
@@ -67,7 +72,7 @@ class AsyncChatResource:
         stream: Literal[False] = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any]: ...
+    ) -> ChatCompletionResponse: ...
 
     @overload
     async def create(
@@ -78,7 +83,7 @@ class AsyncChatResource:
         stream: Literal[True],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> AsyncIterator[dict[str, Any]]: ...
+    ) -> AsyncIterator[ChatCompletionChunk]: ...
 
     async def create(
         self,
@@ -88,13 +93,13 @@ class AsyncChatResource:
         stream: bool = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
+    ) -> ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]:
         """Create a chat completion.
 
-        ``stream=False`` (default) returns the parsed JSON response body as a
-        dict. ``stream=True`` returns an async iterator of decoded SSE
-        events — ``await`` the call to get the iterator, then ``async for``
-        to consume it::
+        ``stream=False`` (default) returns a :class:`ChatCompletionResponse`.
+        ``stream=True`` returns an async iterator of
+        :class:`ChatCompletionChunk` — ``await`` the call to get the
+        iterator, then ``async for`` to consume it::
 
             stream = await client.chat.create(model="m", messages=[...], stream=True)
             async for chunk in stream:
@@ -114,11 +119,12 @@ class AsyncChatResource:
             extra=extra,
             stream=False,
         )
-        return await self._client._request_json(
+        raw = await self._client._request_json(
             "POST",
             "/chat/completions",
             json_body=body,
         )
+        return ChatCompletionResponse.model_validate(raw)
 
     async def stream(
         self,
@@ -127,11 +133,10 @@ class AsyncChatResource:
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """Stream a chat completion as SSE events.
+    ) -> AsyncIterator[ChatCompletionChunk]:
+        """Stream a chat completion as :class:`ChatCompletionChunk` events.
 
-        Returns an async iterator over decoded ``data: {...}`` events; stops
-        at Venice's ``[DONE]`` sentinel. **Requires ``await`` before
+        Stops at Venice's ``[DONE]`` sentinel. **Requires ``await`` before
         ``async for``** — same contract as ``create(stream=True)``::
 
             stream = await client.chat.stream(model="m", messages=[...])
@@ -153,7 +158,7 @@ class AsyncChatResource:
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None,
         **extra: Any,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[ChatCompletionChunk]:
         body = _build_body(
             model=model,
             messages=messages,
@@ -169,7 +174,7 @@ class AsyncChatResource:
         ) as response:
             try:
                 async for event in aiter_sse_events(response.aiter_bytes()):
-                    yield event
+                    yield ChatCompletionChunk.model_validate(event)
             except httpx.HTTPError as exc:
                 raise translate_httpx_error(exc, "stream POST /chat/completions") from exc
 
@@ -180,7 +185,7 @@ class AsyncChatResource:
         input: Any,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> ResponsesResponse:
         """Call Venice's ``/responses`` endpoint (OpenAI-style Responses API)."""
         body: dict[str, Any] = {"model": model, "input": input}
         if venice_parameters is not None:
@@ -188,11 +193,12 @@ class AsyncChatResource:
         for key, value in extra.items():
             if value is not None:
                 body[key] = value
-        return await self._client._request_json(
+        raw = await self._client._request_json(
             "POST",
             "/responses",
             json_body=body,
         )
+        return ResponsesResponse.model_construct(**raw)
 
 
 class _AsyncCompletionsSubResource:
@@ -216,7 +222,7 @@ class _AsyncCompletionsSubResource:
         stream: Literal[False] = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any]: ...
+    ) -> ChatCompletionResponse: ...
 
     @overload
     async def create(
@@ -227,7 +233,7 @@ class _AsyncCompletionsSubResource:
         stream: Literal[True],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> AsyncIterator[dict[str, Any]]: ...
+    ) -> AsyncIterator[ChatCompletionChunk]: ...
 
     async def create(
         self,
@@ -237,7 +243,7 @@ class _AsyncCompletionsSubResource:
         stream: bool = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any] | AsyncIterator[dict[str, Any]]:
+    ) -> ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]:
         result = await self._parent.create(
             model=model,
             messages=messages,
@@ -245,7 +251,9 @@ class _AsyncCompletionsSubResource:
             venice_parameters=venice_parameters,
             **extra,
         )
-        return cast("dict[str, Any] | AsyncIterator[dict[str, Any]]", result)
+        return cast(
+            "ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]", result
+        )
 
     async def stream(
         self,
@@ -254,7 +262,7 @@ class _AsyncCompletionsSubResource:
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[ChatCompletionChunk]:
         return await self._parent.stream(
             model=model,
             messages=messages,
@@ -279,7 +287,7 @@ class ChatResource:
         stream: Literal[False] = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any]: ...
+    ) -> ChatCompletionResponse: ...
 
     @overload
     def create(
@@ -290,7 +298,7 @@ class ChatResource:
         stream: Literal[True],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> Iterator[dict[str, Any]]: ...
+    ) -> Iterator[ChatCompletionChunk]: ...
 
     def create(
         self,
@@ -300,7 +308,7 @@ class ChatResource:
         stream: bool = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any] | Iterator[dict[str, Any]]:
+    ) -> ChatCompletionResponse | Iterator[ChatCompletionChunk]:
         if stream:
             return self.stream(
                 model=model,
@@ -315,11 +323,12 @@ class ChatResource:
             extra=extra,
             stream=False,
         )
-        return self._client._request_json(
+        raw = self._client._request_json(
             "POST",
             "/chat/completions",
             json_body=body,
         )
+        return ChatCompletionResponse.model_validate(raw)
 
     def stream(
         self,
@@ -328,7 +337,7 @@ class ChatResource:
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> Iterator[ChatCompletionChunk]:
         extra.pop("stream", None)
         body = _build_body(
             model=model,
@@ -344,7 +353,8 @@ class ChatResource:
             headers={"Accept": "text/event-stream"},
         ) as response:
             try:
-                yield from iter_sse_events(response.iter_bytes())
+                for event in iter_sse_events(response.iter_bytes()):
+                    yield ChatCompletionChunk.model_validate(event)
             except httpx.HTTPError as exc:
                 raise translate_httpx_error(exc, "stream POST /chat/completions") from exc
 
@@ -355,18 +365,19 @@ class ChatResource:
         input: Any,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> ResponsesResponse:
         body: dict[str, Any] = {"model": model, "input": input}
         if venice_parameters is not None:
             body["venice_parameters"] = dict(venice_parameters)
         for key, value in extra.items():
             if value is not None:
                 body[key] = value
-        return self._client._request_json(
+        raw = self._client._request_json(
             "POST",
             "/responses",
             json_body=body,
         )
+        return ResponsesResponse.model_construct(**raw)
 
 
 class _CompletionsSubResource:
@@ -384,7 +395,7 @@ class _CompletionsSubResource:
         stream: Literal[False] = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any]: ...
+    ) -> ChatCompletionResponse: ...
 
     @overload
     def create(
@@ -395,7 +406,7 @@ class _CompletionsSubResource:
         stream: Literal[True],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> Iterator[dict[str, Any]]: ...
+    ) -> Iterator[ChatCompletionChunk]: ...
 
     def create(
         self,
@@ -405,7 +416,7 @@ class _CompletionsSubResource:
         stream: bool = False,
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> dict[str, Any] | Iterator[dict[str, Any]]:
+    ) -> ChatCompletionResponse | Iterator[ChatCompletionChunk]:
         result = self._parent.create(
             model=model,
             messages=messages,
@@ -413,7 +424,9 @@ class _CompletionsSubResource:
             venice_parameters=venice_parameters,
             **extra,
         )
-        return cast("dict[str, Any] | Iterator[dict[str, Any]]", result)
+        return cast(
+            "ChatCompletionResponse | Iterator[ChatCompletionChunk]", result
+        )
 
     def stream(
         self,
@@ -422,7 +435,7 @@ class _CompletionsSubResource:
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None = None,
         **extra: Any,
-    ) -> Iterator[dict[str, Any]]:
+    ) -> Iterator[ChatCompletionChunk]:
         return self._parent.stream(
             model=model,
             messages=messages,

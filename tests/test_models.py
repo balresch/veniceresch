@@ -25,18 +25,21 @@ async def test_list_accepts_video_type(mock_api, async_client):
 
 
 async def test_list_traits(mock_api, async_client):
-    mock_api.get("/models/traits").respond(200, json={"default": "llama"})
+    mock_api.get("/models/traits").respond(200, json={"data": {"default": "llama"}})
     result = await async_client.models.list_traits(type="text")
-    assert result == {"default": "llama"}
+    assert result.data == {"default": "llama"}
 
 
 async def test_compatibility_mapping(mock_api, async_client):
-    mock_api.get("/models/compatibility_mapping").respond(200, json={"gpt-4": "llama-3.3-70b"})
+    mock_api.get("/models/compatibility_mapping").respond(
+        200, json={"data": {"gpt-4": "llama-3.3-70b"}}
+    )
     result = await async_client.models.compatibility_mapping(type="text")
-    assert result["gpt-4"] == "llama-3.3-70b"
+    assert result.data == {"gpt-4": "llama-3.3-70b"}
 
 
 def test_sync_models_list(mock_api, sync_client):
     mock_api.get("/models").respond(200, json={"object": "list", "data": [{"id": "m"}]})
     result = sync_client.models.list()
-    assert result["data"][0]["id"] == "m"
+    # .data entries stay as dicts — see ModelList docstring for why.
+    assert result.data[0]["id"] == "m"

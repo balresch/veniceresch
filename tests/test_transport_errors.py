@@ -170,14 +170,14 @@ async def test_async_stream_mid_iteration_wraps_protocol_error() -> None:
         transport=_AsyncMidStreamFailure(httpx.RemoteProtocolError("connection dropped"))
     )
     async with AsyncVeniceClient(api_key="k", http_client=http) as client:
-        events: list[dict] = []
+        events: list = []
         with pytest.raises(VeniceConnectionError) as info:
             stream = await client.chat.stream(
                 model="m", messages=[{"role": "user", "content": "hi"}]
             )
             async for event in stream:
                 events.append(event)
-        assert events == [{"partial": 1}]
+        assert len(events) == 1 and events[0].model_extra == {"partial": 1}
         assert isinstance(info.value.__cause__, httpx.RemoteProtocolError)
 
 
@@ -186,11 +186,11 @@ def test_sync_stream_mid_iteration_wraps_protocol_error() -> None:
         transport=_SyncMidStreamFailure(httpx.RemoteProtocolError("connection dropped"))
     )
     with VeniceClient(api_key="k", http_client=http) as client:
-        events: list[dict] = []
+        events: list = []
         with pytest.raises(VeniceConnectionError) as info:
             for event in client.chat.stream(
                 model="m", messages=[{"role": "user", "content": "hi"}]
             ):
                 events.append(event)
-        assert events == [{"partial": 1}]
+        assert len(events) == 1 and events[0].model_extra == {"partial": 1}
         assert isinstance(info.value.__cause__, httpx.RemoteProtocolError)

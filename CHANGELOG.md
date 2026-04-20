@@ -7,6 +7,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Resource methods return typed Pydantic models instead of raw dicts.
+  `chat.create` → `ChatCompletionResponse`, `chat.stream` events →
+  `ChatCompletionChunk`, `chat.create_response` → `ResponsesResponse`,
+  `models.list` → `ModelList`, `billing.balance` → `BillingBalanceResponse`,
+  etc. All inherit from a `VeniceBaseModel` with
+  `ConfigDict(extra="allow")`, so unknown fields Venice adds later don't
+  raise — they land on `.model_extra`. Attribute access everywhere:
+  `response.choices[0]` instead of `response["choices"][0]`. Closes #4.
+- `src/venice_sdk/types.py` re-exports the generated and hand-authored
+  response classes as the public types surface.
+- `src/venice_sdk/_base_model.VeniceBaseModel` — shared base for every
+  Pydantic model. Generated classes inherit it via
+  `datamodel-codegen --base-class`. `scripts/regen_types.sh` also strips
+  the per-class `extra="forbid"` overrides that datamodel-codegen emits
+  for schemas with `additionalProperties: false` in the swagger.
 - `client.chat.completions.create(...)` / `.stream(...)` — OpenAI-compatible
   namespace alias. `client.chat.create(...)` still works; both spellings
   delegate to the same underlying request. Closes #2.
@@ -22,6 +37,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed (breaking)
 
+- Resource methods return Pydantic models, not dicts. Callers that did
+  `response["id"]` must switch to `response.id`. Nested list/dict values
+  (e.g. `choices`, `messages[0]["content"]`) are still plain dicts for
+  drift tolerance — parse to a typed form explicitly when you need it
+  (`ModelResponse.model_validate(result.data[0])`). Part of #4.
 - `client.chat.stream(...)` is now an `async def` returning an async
   iterator. Callers must `await` it before `async for` — `stream =
   await client.chat.stream(...); async for e in stream: ...`. This unifies

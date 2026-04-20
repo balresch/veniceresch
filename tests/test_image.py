@@ -17,16 +17,15 @@ SAMPLE_B64 = base64.b64encode(SAMPLE_BYTES).decode("ascii")
 
 
 async def test_generate_returns_json(mock_api, async_client):
-    route = mock_api.post("/image/generate").respond(
-        200, json={"images": [{"b64_json": SAMPLE_B64}]}
-    )
+    # Swagger: /image/generate JSON response has images: list[str] (base64).
+    route = mock_api.post("/image/generate").respond(200, json={"images": [SAMPLE_B64]})
     result = await async_client.image.generate(
         model="flux-dev",
         prompt="a red cube",
         width=512,
         height=512,
     )
-    assert result["images"][0]["b64_json"] == SAMPLE_B64
+    assert result.images == [SAMPLE_B64]
     body = json.loads(route.calls.last.request.content)
     assert body == {"model": "flux-dev", "prompt": "a red cube", "width": 512, "height": 512}
 
@@ -151,7 +150,8 @@ async def test_list_styles(mock_api, async_client):
         json={"data": ["cinematic", "photographic"], "object": "list"},
     )
     result = await async_client.image.list_styles()
-    assert result == {"data": ["cinematic", "photographic"], "object": "list"}
+    assert result.data == ["cinematic", "photographic"]
+    assert result.object == "list"
 
 
 # ---- sync ----------------------------------------------------------------

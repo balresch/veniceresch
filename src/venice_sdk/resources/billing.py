@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from venice_sdk.types import (
+    BillingBalanceResponse,
+    BillingUsageAnalyticsResponse,
+    BillingUsageResponse,
+)
+
 if TYPE_CHECKING:
     from venice_sdk._client import AsyncVeniceClient, VeniceClient
 
@@ -16,8 +22,9 @@ class AsyncBillingResource:
     def __init__(self, client: AsyncVeniceClient) -> None:
         self._client = client
 
-    async def balance(self) -> dict[str, Any]:
-        return await self._client._request_json("GET", "/billing/balance")
+    async def balance(self) -> BillingBalanceResponse:
+        raw = await self._client._request_json("GET", "/billing/balance")
+        return BillingBalanceResponse.model_construct(**raw)
 
     async def usage(
         self,
@@ -28,7 +35,7 @@ class AsyncBillingResource:
         limit: int | None = None,
         page: int | None = None,
         sort_order: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> BillingUsageResponse:
         params = _clean_params(
             {
                 "currency": currency,
@@ -39,7 +46,8 @@ class AsyncBillingResource:
                 "sortOrder": sort_order,
             }
         )
-        return await self._client._request_json("GET", "/billing/usage", params=params or None)
+        raw = await self._client._request_json("GET", "/billing/usage", params=params or None)
+        return BillingUsageResponse.model_construct(**raw)
 
     async def usage_analytics(
         self,
@@ -47,7 +55,7 @@ class AsyncBillingResource:
         lookback: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> BillingUsageAnalyticsResponse:
         params = _clean_params(
             {
                 "lookback": lookback,
@@ -55,19 +63,21 @@ class AsyncBillingResource:
                 "endDate": end_date,
             }
         )
-        return await self._client._request_json(
+        raw = await self._client._request_json(
             "GET",
             "/billing/usage-analytics",
             params=params or None,
         )
+        return BillingUsageAnalyticsResponse.model_construct(**raw)
 
 
 class BillingResource:
     def __init__(self, client: VeniceClient) -> None:
         self._client = client
 
-    def balance(self) -> dict[str, Any]:
-        return self._client._request_json("GET", "/billing/balance")
+    def balance(self) -> BillingBalanceResponse:
+        raw = self._client._request_json("GET", "/billing/balance")
+        return BillingBalanceResponse.model_construct(**raw)
 
     def usage(
         self,
@@ -78,7 +88,7 @@ class BillingResource:
         limit: int | None = None,
         page: int | None = None,
         sort_order: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> BillingUsageResponse:
         params = _clean_params(
             {
                 "currency": currency,
@@ -89,7 +99,8 @@ class BillingResource:
                 "sortOrder": sort_order,
             }
         )
-        return self._client._request_json("GET", "/billing/usage", params=params or None)
+        raw = self._client._request_json("GET", "/billing/usage", params=params or None)
+        return BillingUsageResponse.model_construct(**raw)
 
     def usage_analytics(
         self,
@@ -97,7 +108,7 @@ class BillingResource:
         lookback: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> BillingUsageAnalyticsResponse:
         params = _clean_params(
             {
                 "lookback": lookback,
@@ -105,11 +116,12 @@ class BillingResource:
                 "endDate": end_date,
             }
         )
-        return self._client._request_json(
+        raw = self._client._request_json(
             "GET",
             "/billing/usage-analytics",
             params=params or None,
         )
+        return BillingUsageAnalyticsResponse.model_construct(**raw)
 
 
 __all__ = ["AsyncBillingResource", "BillingResource"]

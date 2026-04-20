@@ -4,9 +4,11 @@ from __future__ import annotations
 
 
 async def test_balance(mock_api, async_client):
+    # model_construct tolerates minimal bodies — extras fall through to
+    # __pydantic_extra__ and known-field validation is skipped.
     mock_api.get("/billing/balance").respond(200, json={"VCU": 42, "USD": 1.23})
     result = await async_client.billing.balance()
-    assert result == {"VCU": 42, "USD": 1.23}
+    assert result.model_extra == {"VCU": 42, "USD": 1.23}
 
 
 async def test_usage_with_filters(mock_api, async_client):

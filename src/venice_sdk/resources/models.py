@@ -8,7 +8,9 @@ Venice adds later just works without an SDK release.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from venice_sdk.types import ModelCompatibilityResponse, ModelList, ModelTraitsResponse
 
 if TYPE_CHECKING:
     from venice_sdk._client import AsyncVeniceClient, VeniceClient
@@ -24,25 +26,28 @@ class AsyncModelsResource:
         self,
         *,
         type: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ModelList:
         params = {"type": type} if type else None
-        return await self._client._request_json("GET", "/models", params=params)
+        raw = await self._client._request_json("GET", "/models", params=params)
+        return ModelList.model_validate(raw)
 
-    async def list_traits(self, *, type: str | None = None) -> dict[str, Any]:
+    async def list_traits(self, *, type: str | None = None) -> ModelTraitsResponse:
         params = {"type": type} if type else None
-        return await self._client._request_json("GET", "/models/traits", params=params)
+        raw = await self._client._request_json("GET", "/models/traits", params=params)
+        return ModelTraitsResponse.model_validate(raw)
 
     async def compatibility_mapping(
         self,
         *,
         type: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ModelCompatibilityResponse:
         params = {"type": type} if type else None
-        return await self._client._request_json(
+        raw = await self._client._request_json(
             "GET",
             "/models/compatibility_mapping",
             params=params,
         )
+        return ModelCompatibilityResponse.model_validate(raw)
 
 
 class ModelsResource:
@@ -51,21 +56,24 @@ class ModelsResource:
     def __init__(self, client: VeniceClient) -> None:
         self._client = client
 
-    def list(self, *, type: str | None = None) -> dict[str, Any]:
+    def list(self, *, type: str | None = None) -> ModelList:
         params = {"type": type} if type else None
-        return self._client._request_json("GET", "/models", params=params)
+        raw = self._client._request_json("GET", "/models", params=params)
+        return ModelList.model_validate(raw)
 
-    def list_traits(self, *, type: str | None = None) -> dict[str, Any]:
+    def list_traits(self, *, type: str | None = None) -> ModelTraitsResponse:
         params = {"type": type} if type else None
-        return self._client._request_json("GET", "/models/traits", params=params)
+        raw = self._client._request_json("GET", "/models/traits", params=params)
+        return ModelTraitsResponse.model_validate(raw)
 
-    def compatibility_mapping(self, *, type: str | None = None) -> dict[str, Any]:
+    def compatibility_mapping(self, *, type: str | None = None) -> ModelCompatibilityResponse:
         params = {"type": type} if type else None
-        return self._client._request_json(
+        raw = self._client._request_json(
             "GET",
             "/models/compatibility_mapping",
             params=params,
         )
+        return ModelCompatibilityResponse.model_validate(raw)
 
 
 __all__ = ["AsyncModelsResource", "ModelsResource"]
