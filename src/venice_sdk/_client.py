@@ -154,9 +154,10 @@ class AsyncVeniceClient(_BaseClient):
         )
         parsed = response.json()
         if not isinstance(parsed, dict):
-            # Some endpoints return arrays; wrap so the typed surface stays
-            # consistent. Resource methods that need arrays use _request_any.
-            return {"data": parsed}
+            raise TypeError(
+                f"Expected JSON object from {path}, got {type(parsed).__name__}. "
+                "Use _request_any for endpoints that return arrays or primitives."
+            )
         return parsed
 
     async def _request_any(
@@ -338,7 +339,10 @@ class VeniceClient(_BaseClient):
         )
         parsed = response.json()
         if not isinstance(parsed, dict):
-            return {"data": parsed}
+            raise TypeError(
+                f"Expected JSON object from {path}, got {type(parsed).__name__}. "
+                "Use _request_any for endpoints that return arrays or primitives."
+            )
         return parsed
 
     def _request_any(

@@ -146,10 +146,12 @@ async def test_background_remove_requires_input(async_client):
 
 
 async def test_list_styles(mock_api, async_client):
-    mock_api.get("/image/styles").respond(200, json=["cinematic", "photographic"])
+    mock_api.get("/image/styles").respond(
+        200,
+        json={"data": ["cinematic", "photographic"], "object": "list"},
+    )
     result = await async_client.image.list_styles()
-    # Client wraps top-level arrays in {"data": ...}.
-    assert result == {"data": ["cinematic", "photographic"]}
+    assert result == {"data": ["cinematic", "photographic"], "object": "list"}
 
 
 # ---- sync ----------------------------------------------------------------

@@ -57,7 +57,7 @@ class AsyncVideoResource:
         *,
         model: str,
         prompt: str,
-        duration: str,
+        duration: str | None = None,
         **extra: Any,
     ) -> dict[str, Any]:
         body = _drop_none({"model": model, "prompt": prompt, "duration": duration, **extra})
@@ -106,7 +106,7 @@ class AsyncVideoResource:
         self,
         *,
         model: str,
-        duration: str,
+        duration: str | None = None,
         **extra: Any,
     ) -> dict[str, Any]:
         body = _drop_none({"model": model, "duration": duration, **extra})
@@ -164,7 +164,14 @@ class VideoResource:
     def __init__(self, client: VeniceClient) -> None:
         self._client = client
 
-    def queue(self, *, model: str, prompt: str, duration: str, **extra: Any) -> dict[str, Any]:
+    def queue(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        duration: str | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
         body = _drop_none({"model": model, "prompt": prompt, "duration": duration, **extra})
         return self._client._request_json("POST", "/video/queue", json_body=body)
 
@@ -205,7 +212,13 @@ class VideoResource:
             headers={"Accept": "video/mp4"},
         )
 
-    def quote(self, *, model: str, duration: str, **extra: Any) -> dict[str, Any]:
+    def quote(
+        self,
+        *,
+        model: str,
+        duration: str | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
         body = _drop_none({"model": model, "duration": duration, **extra})
         return self._client._request_json("POST", "/video/quote", json_body=body)
 

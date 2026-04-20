@@ -26,7 +26,10 @@ def _extract_events(buffer: str) -> tuple[list[str], str]:
 
     Returns ``(complete_events, remaining_buffer)``.
     """
-    parts = buffer.split("\n\n")
+    # Per the SSE spec, delimiters can be \n\n, \r\r, or \r\n\r\n. Venice
+    # sends \n\n in practice, but normalize \r\n to \n so we don't split on
+    # the wrong boundary if that ever changes.
+    parts = buffer.replace("\r\n", "\n").split("\n\n")
     # The last fragment is incomplete unless buffer ended with \n\n.
     return parts[:-1], parts[-1]
 

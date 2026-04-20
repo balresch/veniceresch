@@ -171,17 +171,19 @@ def test_url_for_passes_through_absolute_urls():
     assert client._url_for("https://other/thing") == "https://other/thing"
 
 
-# ---- array responses wrapped for typed surface ---------------------------
+# ---- non-dict responses ---------------------------------------------------
 
 
-async def test_async_array_response_wrapped(mock_api, async_client):
-    # Some Venice endpoints return a top-level array; wrap so callers see a dict.
+async def test_request_json_raises_on_non_dict(mock_api, async_client):
+    # _request_json promises a dict. If Venice ever returns a top-level array
+    # from an endpoint we route through it, surface that loudly rather than
+    # silently wrapping — callers should switch to _request_any.
     mock_api.get("/image/styles").respond(200, json=["a", "b", "c"])
-    result = await async_client._request_json("GET", "/image/styles")
-    assert result == {"data": ["a", "b", "c"]}
+    with pytest.raises(TypeError, match="Expected JSON object"):
+        await async_client._request_json("GET", "/image/styles")
 
 
-async def test_async_any_returns_raw_json(mock_api, async_client):
+async def test_request_any_returns_raw_json(mock_api, async_client):
     mock_api.get("/models/traits").respond(200, json=["trait1", "trait2"])
     result = await async_client._request_any("GET", "/models/traits")
     assert result == ["trait1", "trait2"]
