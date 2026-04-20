@@ -197,7 +197,7 @@ pytest                                    # unit tests (offline, respx-mocked)
 VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 ```
 
-## Endpoint coverage (v0.1.0)
+## Endpoint coverage (v0.2.0)
 
 | Group | Covered | Gap |
 |---|---|---|
