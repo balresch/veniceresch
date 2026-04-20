@@ -1,4 +1,4 @@
-"""``/chat/completions`` and ``/responses`` resource.
+"""``/chat/completions`` resource.
 
 Chat is the API's hot path. Entry points:
 
@@ -8,12 +8,14 @@ Chat is the API's hot path. Entry points:
 * :meth:`AsyncChatResource.stream` — explicit streaming; same underlying
   path, same await contract (``await`` to get the iterator, then
   ``async for`` it).
-* :meth:`AsyncChatResource.create_response` — Venice's ``/responses``
-  endpoint (OpenAI-style Responses API).
 
 OpenAI-compatible aliases live on ``client.chat.completions.create(...)``
 and ``client.chat.completions.stream(...)`` — they delegate to the same
 methods so both namespaces produce identical requests.
+
+Venice's ``/responses`` endpoint lives on its own
+:class:`~veniceresch.resources.responses.AsyncResponsesResource` — call it
+via ``client.responses.create(...)``.
 
 ``venice_parameters`` is passed through as-is. Validation is Venice's job.
 """
@@ -27,11 +29,7 @@ import httpx
 
 from veniceresch._errors import translate_httpx_error
 from veniceresch.resources._sse import aiter_sse_events, iter_sse_events
-from veniceresch.types import (
-    ChatCompletionChunk,
-    ChatCompletionResponse,
-    ResponsesResponse,
-)
+from veniceresch.types import ChatCompletionChunk, ChatCompletionResponse
 
 if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
@@ -178,36 +176,12 @@ class AsyncChatResource:
             except httpx.HTTPError as exc:
                 raise translate_httpx_error(exc, "stream POST /chat/completions") from exc
 
-    async def create_response(
-        self,
-        *,
-        model: str,
-        input: Any,
-        venice_parameters: Mapping[str, Any] | None = None,
-        **extra: Any,
-    ) -> ResponsesResponse:
-        """Call Venice's ``/responses`` endpoint (OpenAI-style Responses API)."""
-        body: dict[str, Any] = {"model": model, "input": input}
-        if venice_parameters is not None:
-            body["venice_parameters"] = dict(venice_parameters)
-        for key, value in extra.items():
-            if value is not None:
-                body[key] = value
-        raw = await self._client._request_json(
-            "POST",
-            "/responses",
-            json_body=body,
-        )
-        return ResponsesResponse.model_construct(**raw)
-
 
 class _AsyncCompletionsSubResource:
     """OpenAI-compatible alias: ``client.chat.completions.create(...)``.
 
     Delegates to :class:`AsyncChatResource` so both spellings produce the
-    identical HTTP request and response. ``create_response`` is deliberately
-    not proxied here — OpenAI's SDK puts the Responses API on a separate
-    ``client.responses`` namespace.
+    identical HTTP request and response.
     """
 
     def __init__(self, parent: AsyncChatResource) -> None:
@@ -355,27 +329,6 @@ class ChatResource:
                     yield ChatCompletionChunk.model_validate(event)
             except httpx.HTTPError as exc:
                 raise translate_httpx_error(exc, "stream POST /chat/completions") from exc
-
-    def create_response(
-        self,
-        *,
-        model: str,
-        input: Any,
-        venice_parameters: Mapping[str, Any] | None = None,
-        **extra: Any,
-    ) -> ResponsesResponse:
-        body: dict[str, Any] = {"model": model, "input": input}
-        if venice_parameters is not None:
-            body["venice_parameters"] = dict(venice_parameters)
-        for key, value in extra.items():
-            if value is not None:
-                body[key] = value
-        raw = self._client._request_json(
-            "POST",
-            "/responses",
-            json_body=body,
-        )
-        return ResponsesResponse.model_construct(**raw)
 
 
 class _CompletionsSubResource:

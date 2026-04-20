@@ -196,7 +196,8 @@ VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 
 | Group | Covered | Gap |
 |---|---|---|
-| chat | `/chat/completions`, `/responses` | — |
+| chat | `/chat/completions` | — |
+| responses | `/responses` | — |
 | image | `/image/generate`, `/image/edit`, `/image/multi-edit`, `/image/upscale`, `/image/background-remove`, `/image/styles` | `/images/generations` (OpenAI alias — use `/image/generate`) |
 | video | `/video/queue`, `/video/retrieve`, `/video/quote`, `/video/complete`, `/video/transcriptions` | — |
 | audio | `/audio/speech`, `/audio/transcriptions`, `/audio/queue`, `/audio/retrieve`, `/audio/quote`, `/audio/complete` | — |

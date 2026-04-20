@@ -30,6 +30,7 @@ from veniceresch.resources.chat import AsyncChatResource, ChatResource
 from veniceresch.resources.embeddings import AsyncEmbeddingsResource, EmbeddingsResource
 from veniceresch.resources.image import AsyncImageResource, ImageResource
 from veniceresch.resources.models import AsyncModelsResource, ModelsResource
+from veniceresch.resources.responses import AsyncResponsesResource, ResponsesResource
 from veniceresch.resources.video import AsyncVideoResource, VideoResource
 
 DEFAULT_BASE_URL = "https://api.venice.ai/api/v1"
@@ -118,6 +119,7 @@ class AsyncVeniceClient(_BaseClient):
             self._http = http_client
             self._owns_http = False
         self.chat = AsyncChatResource(self)
+        self.responses = AsyncResponsesResource(self)
         self.image = AsyncImageResource(self)
         self.video = AsyncVideoResource(self)
         self.audio = AsyncAudioResource(self)
@@ -310,6 +312,7 @@ class VeniceClient(_BaseClient):
             self._http = http_client
             self._owns_http = False
         self.chat = ChatResource(self)
+        self.responses = ResponsesResource(self)
         self.image = ImageResource(self)
         self.video = VideoResource(self)
         self.audio = AudioResource(self)

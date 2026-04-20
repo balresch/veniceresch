@@ -1,4 +1,4 @@
-"""Tests for the chat resource: create, stream, create_response."""
+"""Tests for the chat resource: create and stream."""
 
 from __future__ import annotations
 
@@ -236,31 +236,6 @@ async def test_stream_ignores_comments_and_unknown_fields(mock_api, async_client
     assert len(events) == 1
     # "n":42 arrives as an extra field thanks to extra=allow on the base model.
     assert events[0].model_extra == {"n": 42}
-
-
-# ---- /responses endpoint --------------------------------------------------
-
-
-async def test_create_response(mock_api, async_client):
-    route = mock_api.post("/responses").respond(
-        200,
-        json={
-            "id": "resp-1",
-            "object": "response",
-            "created_at": 1700000000,
-            "status": "completed",
-            "model": "m",
-            "output": [],
-        },
-    )
-    result = await async_client.chat.create_response(
-        model="m",
-        input=[{"role": "user", "content": "hi"}],
-    )
-    assert result.id == "resp-1"
-    body = json.loads(route.calls.last.request.content)
-    assert body["model"] == "m"
-    assert body["input"] == [{"role": "user", "content": "hi"}]
 
 
 # ---- sync client also has .chat ------------------------------------------

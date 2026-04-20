@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - Resource methods return typed Pydantic models instead of raw dicts.
   `chat.create` → `ChatCompletionResponse`, `chat.stream` events →
-  `ChatCompletionChunk`, `chat.create_response` → `ResponsesResponse`,
+  `ChatCompletionChunk`, `responses.create` → `ResponsesResponse`,
   `models.list` → `ModelList`, `billing.balance` → `BillingBalanceResponse`,
   etc. All inherit from a `VeniceBaseModel` with
   `ConfigDict(extra="allow")`, so unknown fields Venice adds later don't
@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `client.chat.completions.create(...)` / `.stream(...)` — OpenAI-compatible
   namespace alias. `client.chat.create(...)` still works; both spellings
   delegate to the same underlying request. Closes #2.
+- `client.responses.create(...)` — Venice's ``/responses`` endpoint
+  (OpenAI-style Responses API) now has its own top-level namespace, matching
+  the `openai` Python SDK's shape. Closes #5.
 - `client.chat.create(stream=True)` now returns an async iterator of
   decoded SSE events. Replaces the old `ValueError`. Same shape as the
   OpenAI Python SDK. Closes #3.
@@ -50,6 +53,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - `chat.create(stream=True)` no longer raises `ValueError`. Callers that
   caught that error to fall back to `.stream(...)` can delete the
   fallback.
+- `client.chat.create_response(...)` is gone. Call
+  `client.responses.create(...)` instead — same kwargs, same response
+  type (`ResponsesResponse`). Part of #5.
 - Code that previously caught `httpx.ConnectError`, `httpx.ReadTimeout`, or
   other `httpx.*` transport exceptions will stop catching them. Replace
   `except httpx.ConnectError` with `except VeniceConnectionError` (and
