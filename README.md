@@ -108,7 +108,9 @@ balance = await client.billing.balance()
 
 ## Error handling
 
-All HTTP errors raise a typed subclass of `VeniceAPIError`:
+Every failure raises a subclass of `VeniceError`. HTTP responses map to
+`VeniceAPIError`; transport-level failures (DNS, TLS, timeouts) map to
+`VeniceConnectionError` / `VeniceTimeoutError`:
 
 | Exception | When |
 |---|---|
@@ -119,9 +121,24 @@ All HTTP errors raise a typed subclass of `VeniceAPIError`:
 | `VeniceRateLimitError` | 429 |
 | `VeniceServerError` | 5xx |
 | `VeniceContentViolationError` | body contained `suggested_prompt` (any status) |
+| `VeniceConnectionError` | DNS / TLS / connection reset / proxy failure |
+| `VeniceTimeoutError` | request or response timed out |
 
 ```python
-from venice_sdk import VeniceContentViolationError
+from venice_sdk import (
+    VeniceConnectionError,
+    VeniceContentViolationError,
+    VeniceRateLimitError,
+    VeniceServerError,
+    VeniceTimeoutError,
+)
+
+# Retriable failures — no httpx imports needed:
+try:
+    await client.chat.create(model="m", messages=[...])
+except (VeniceRateLimitError, VeniceServerError,
+        VeniceConnectionError, VeniceTimeoutError):
+    ...  # back off and retry
 
 try:
     await client.image.generate(model="m", prompt="...")
@@ -129,6 +146,9 @@ except VeniceContentViolationError as exc:
     if exc.suggested_prompt:
         retry = await client.image.generate(model="m", prompt=exc.suggested_prompt)
 ```
+
+`VeniceConnectionError.__cause__` is the underlying `httpx` exception if
+you need to introspect it.
 
 ## Sync client
 

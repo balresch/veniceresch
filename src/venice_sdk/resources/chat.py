@@ -15,6 +15,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
+from venice_sdk._errors import translate_httpx_error
 from venice_sdk.resources._sse import aiter_sse_events, iter_sse_events
 
 if TYPE_CHECKING:
@@ -101,8 +104,11 @@ class AsyncChatResource:
             json_body=body,
             headers={"Accept": "text/event-stream"},
         ) as response:
-            async for event in aiter_sse_events(response.aiter_bytes()):
-                yield event
+            try:
+                async for event in aiter_sse_events(response.aiter_bytes()):
+                    yield event
+            except httpx.HTTPError as exc:
+                raise translate_httpx_error(exc, "stream POST /chat/completions") from exc
 
     async def create_response(
         self,
@@ -177,7 +183,10 @@ class ChatResource:
             json_body=body,
             headers={"Accept": "text/event-stream"},
         ) as response:
-            yield from iter_sse_events(response.iter_bytes())
+            try:
+                yield from iter_sse_events(response.iter_bytes())
+            except httpx.HTTPError as exc:
+                raise translate_httpx_error(exc, "stream POST /chat/completions") from exc
 
     def create_response(
         self,

@@ -19,7 +19,10 @@ from typing import Any
 import httpx
 from typing_extensions import Self
 
-from venice_sdk._errors import raise_for_response
+from venice_sdk._errors import (
+    raise_for_response,
+    translate_httpx_error,
+)
 from venice_sdk._version import __version__
 from venice_sdk.resources.audio import AsyncAudioResource, AudioResource
 from venice_sdk.resources.billing import AsyncBillingResource, BillingResource
@@ -218,18 +221,22 @@ class AsyncVeniceClient(_BaseClient):
         """
         url = self._url_for(path)
         merged_headers = self._merge_headers(headers)
-        async with self._http.stream(
-            method,
-            url,
-            json=json_body,
-            params=params,
-            headers=merged_headers,
-            timeout=self._timeout,
-        ) as response:
-            if not response.is_success:
-                await response.aread()
-                raise_for_response(response)
-            yield response
+        try:
+            stream_ctx = self._http.stream(
+                method,
+                url,
+                json=json_body,
+                params=params,
+                headers=merged_headers,
+                timeout=self._timeout,
+            )
+            async with stream_ctx as response:
+                if not response.is_success:
+                    await response.aread()
+                    raise_for_response(response)
+                yield response
+        except httpx.HTTPError as exc:
+            raise translate_httpx_error(exc, f"stream {method} {path}") from exc
 
     async def _send(
         self,
@@ -249,16 +256,19 @@ class AsyncVeniceClient(_BaseClient):
         # (e.g. video.retrieve_binary passes "video/mp4" explicitly).
         if accept is not None and not _has_header(headers, "accept"):
             merged_headers["Accept"] = accept
-        response = await self._http.request(
-            method,
-            url,
-            json=json_body if files is None else None,
-            params=params,
-            headers=merged_headers,
-            files=files,
-            data=data,
-            timeout=self._timeout,
-        )
+        try:
+            response = await self._http.request(
+                method,
+                url,
+                json=json_body if files is None else None,
+                params=params,
+                headers=merged_headers,
+                files=files,
+                data=data,
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise translate_httpx_error(exc, f"{method} {path}") from exc
         if not response.is_success:
             raise_for_response(response)
         return response
@@ -398,18 +408,22 @@ class VeniceClient(_BaseClient):
     ) -> Iterator[httpx.Response]:
         url = self._url_for(path)
         merged_headers = self._merge_headers(headers)
-        with self._http.stream(
-            method,
-            url,
-            json=json_body,
-            params=params,
-            headers=merged_headers,
-            timeout=self._timeout,
-        ) as response:
-            if not response.is_success:
-                response.read()
-                raise_for_response(response)
-            yield response
+        try:
+            stream_ctx = self._http.stream(
+                method,
+                url,
+                json=json_body,
+                params=params,
+                headers=merged_headers,
+                timeout=self._timeout,
+            )
+            with stream_ctx as response:
+                if not response.is_success:
+                    response.read()
+                    raise_for_response(response)
+                yield response
+        except httpx.HTTPError as exc:
+            raise translate_httpx_error(exc, f"stream {method} {path}") from exc
 
     def _send(
         self,
@@ -427,16 +441,19 @@ class VeniceClient(_BaseClient):
         merged_headers = self._merge_headers(headers)
         if accept is not None and not _has_header(headers, "accept"):
             merged_headers["Accept"] = accept
-        response = self._http.request(
-            method,
-            url,
-            json=json_body if files is None else None,
-            params=params,
-            headers=merged_headers,
-            files=files,
-            data=data,
-            timeout=self._timeout,
-        )
+        try:
+            response = self._http.request(
+                method,
+                url,
+                json=json_body if files is None else None,
+                params=params,
+                headers=merged_headers,
+                files=files,
+                data=data,
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise translate_httpx_error(exc, f"{method} {path}") from exc
         if not response.is_success:
             raise_for_response(response)
         return response

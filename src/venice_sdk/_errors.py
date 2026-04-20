@@ -24,6 +24,24 @@ class VeniceError(Exception):
     """Base class for every exception raised by venice-sdk."""
 
 
+class VeniceConnectionError(VeniceError):
+    """Network-level failure reaching Venice.
+
+    Covers DNS resolution, TLS, connection reset, proxy errors, and other
+    httpx transport-level failures that don't produce an HTTP response. The
+    original ``httpx`` exception is preserved on ``__cause__``.
+    """
+
+
+class VeniceTimeoutError(VeniceError):
+    """Request or response timed out before completion.
+
+    Wraps ``httpx.TimeoutException`` (and its subclasses:
+    ``ReadTimeout``, ``WriteTimeout``, ``ConnectTimeout``, ``PoolTimeout``).
+    The original ``httpx`` exception is preserved on ``__cause__``.
+    """
+
+
 class VeniceAPIError(VeniceError):
     """A non-2xx response came back from Venice.
 
@@ -183,15 +201,33 @@ def raise_for_response(response: httpx.Response) -> None:
     raise exc_cls(message, **kwargs)
 
 
+def translate_httpx_error(exc: httpx.HTTPError, context: str) -> VeniceError:
+    """Map an ``httpx`` transport-level error to a typed Venice exception.
+
+    Called by the transport layer at every ``httpx`` invocation site so
+    callers can catch :class:`VeniceError` (or its transport subclasses)
+    instead of importing ``httpx`` in their except clauses. Pair with
+    ``raise ... from exc`` at the call site to preserve ``__cause__``.
+    """
+    if isinstance(exc, httpx.TimeoutException):
+        return VeniceTimeoutError(f"{context} timed out: {exc}")
+    if isinstance(exc, httpx.ConnectError):
+        return VeniceConnectionError(f"{context} could not connect: {exc}")
+    return VeniceConnectionError(f"{context} transport error: {exc}")
+
+
 __all__ = [
     "VeniceAPIError",
     "VeniceAuthError",
+    "VeniceConnectionError",
     "VeniceContentViolationError",
     "VeniceError",
     "VeniceInsufficientBalanceError",
     "VeniceNotFoundError",
     "VeniceRateLimitError",
     "VeniceServerError",
+    "VeniceTimeoutError",
     "VeniceValidationError",
     "raise_for_response",
+    "translate_httpx_error",
 ]

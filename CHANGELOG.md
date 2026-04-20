@@ -3,6 +3,25 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] — unreleased
+
+### Added
+
+- `VeniceConnectionError` and `VeniceTimeoutError` — transport-level failures
+  (DNS, TLS, connection reset, timeouts) are now wrapped and raised as
+  subclasses of `VeniceError`. The underlying `httpx` exception is preserved
+  on `__cause__`. Wrapping covers every `httpx` call site: both `_send`
+  paths, both `_request_stream` paths, and mid-iteration drops inside
+  `chat.stream` (sync + async). Closes #1.
+
+### Changed (breaking)
+
+- Code that previously caught `httpx.ConnectError`, `httpx.ReadTimeout`, or
+  other `httpx.*` transport exceptions will stop catching them. Replace
+  `except httpx.ConnectError` with `except VeniceConnectionError` (and
+  `httpx.TimeoutException` with `VeniceTimeoutError`). No `httpx` imports
+  are needed at call sites anymore.
+
 ## [0.1.0] — unreleased
 
 Initial release. Replaces the abandoned community package `venice-ai`.
