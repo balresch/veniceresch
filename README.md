@@ -42,16 +42,33 @@ async def main():
 asyncio.run(main())
 ```
 
-## Streaming
+The OpenAI-namespaced form works too — same call, identical HTTP:
 
 ```python
-async for event in client.chat.stream(
+await client.chat.completions.create(
+    model="llama-3.3-70b",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+```
+
+## Streaming
+
+Pass ``stream=True`` to get an async iterator. **``await`` the call, then
+``async for`` the iterator** (same contract as the ``openai`` SDK):
+
+```python
+stream = await client.chat.completions.create(
     model="llama-3.3-70b",
     messages=[{"role": "user", "content": "Tell me a story."}],
-):
+    stream=True,
+)
+async for event in stream:
     delta = event["choices"][0]["delta"].get("content", "")
     print(delta, end="", flush=True)
 ```
+
+`client.chat.stream(...)` is an explicit alias; it uses the same
+await-then-iterate contract.
 
 ## Image: generate, edit, multi-edit
 
@@ -156,9 +173,14 @@ you need to introspect it.
 from venice_sdk import VeniceClient
 
 with VeniceClient(api_key="...") as client:
-    for event in client.chat.stream(model="...", messages=[...]):
+    for event in client.chat.completions.create(
+        model="...", messages=[...], stream=True,
+    ):
         ...
 ```
+
+Sync `stream()` returns an iterator directly (no `await` — that form is
+async-only).
 
 ## Development
 

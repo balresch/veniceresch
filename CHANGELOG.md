@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- `client.chat.completions.create(...)` / `.stream(...)` — OpenAI-compatible
+  namespace alias. `client.chat.create(...)` still works; both spellings
+  delegate to the same underlying request. Closes #2.
+- `client.chat.create(stream=True)` now returns an async iterator of
+  decoded SSE events. Replaces the old `ValueError`. Same shape as the
+  OpenAI Python SDK. Closes #3.
 - `VeniceConnectionError` and `VeniceTimeoutError` — transport-level failures
   (DNS, TLS, connection reset, timeouts) are now wrapped and raised as
   subclasses of `VeniceError`. The underlying `httpx` exception is preserved
@@ -16,6 +22,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed (breaking)
 
+- `client.chat.stream(...)` is now an `async def` returning an async
+  iterator. Callers must `await` it before `async for` — `stream =
+  await client.chat.stream(...); async for e in stream: ...`. This unifies
+  the contract with `create(stream=True)`. Sync `chat.stream(...)` is
+  unaffected. Part of #3.
+- `chat.create(stream=True)` no longer raises `ValueError`. Callers that
+  caught that error to fall back to `.stream(...)` can delete the
+  fallback.
 - Code that previously caught `httpx.ConnectError`, `httpx.ReadTimeout`, or
   other `httpx.*` transport exceptions will stop catching them. Replace
   `except httpx.ConnectError` with `except VeniceConnectionError` (and

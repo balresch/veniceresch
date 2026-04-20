@@ -84,9 +84,10 @@ async def test_async_stream_entry_wraps_connect_error() -> None:
     http = httpx.AsyncClient(transport=_raising_async_transport(httpx.ConnectError("dns")))
     async with AsyncVeniceClient(api_key="k", http_client=http) as client:
         with pytest.raises(VeniceConnectionError) as info:
-            async for _ in client.chat.stream(
+            stream = await client.chat.stream(
                 model="m", messages=[{"role": "user", "content": "hi"}]
-            ):
+            )
+            async for _ in stream:
                 pass
         assert isinstance(info.value.__cause__, httpx.ConnectError)
 
@@ -95,9 +96,10 @@ async def test_async_stream_entry_wraps_timeout() -> None:
     http = httpx.AsyncClient(transport=_raising_async_transport(httpx.ReadTimeout("slow")))
     async with AsyncVeniceClient(api_key="k", http_client=http) as client:
         with pytest.raises(VeniceTimeoutError) as info:
-            async for _ in client.chat.stream(
+            stream = await client.chat.stream(
                 model="m", messages=[{"role": "user", "content": "hi"}]
-            ):
+            )
+            async for _ in stream:
                 pass
         assert isinstance(info.value.__cause__, httpx.ReadTimeout)
 
@@ -170,9 +172,10 @@ async def test_async_stream_mid_iteration_wraps_protocol_error() -> None:
     async with AsyncVeniceClient(api_key="k", http_client=http) as client:
         events: list[dict] = []
         with pytest.raises(VeniceConnectionError) as info:
-            async for event in client.chat.stream(
+            stream = await client.chat.stream(
                 model="m", messages=[{"role": "user", "content": "hi"}]
-            ):
+            )
+            async for event in stream:
                 events.append(event)
         assert events == [{"partial": 1}]
         assert isinstance(info.value.__cause__, httpx.RemoteProtocolError)
