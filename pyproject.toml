@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "venice-sdk"
+name = "veniceresch"
 version = "0.2.0"
 description = "Typed, async-first Python client for the Venice.ai API."
 readme = "README.md"
@@ -39,12 +39,12 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/balresch/venice-sdk"
-Repository = "https://github.com/balresch/venice-sdk"
-Issues = "https://github.com/balresch/venice-sdk/issues"
+Homepage = "https://github.com/balresch/veniceresch"
+Repository = "https://github.com/balresch/veniceresch"
+Issues = "https://github.com/balresch/veniceresch/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/venice_sdk"]
+packages = ["src/veniceresch"]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -54,7 +54,6 @@ include = [
     "tests/",
     "README.md",
     "LICENSE",
-    "PLAN.md",
 ]
 
 [tool.ruff]
@@ -76,7 +75,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/venice_sdk/_generated.py" = ["ALL"]
+"src/veniceresch/_generated.py" = ["ALL"]
 "tests/**" = ["B"]
 
 [tool.ruff.format]
@@ -85,11 +84,11 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.10"
 strict = true
-files = ["src/venice_sdk"]
-exclude = ["src/venice_sdk/_generated\\.py$"]
+files = ["src/veniceresch"]
+exclude = ["src/veniceresch/_generated\\.py$"]
 
 [[tool.mypy.overrides]]
-module = "venice_sdk._generated"
+module = "veniceresch._generated"
 ignore_errors = true
 
 [tool.pytest.ini_options]
@@ -107,8 +106,8 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/venice_sdk"]
-omit = ["src/venice_sdk/_generated.py"]
+source = ["src/veniceresch"]
+omit = ["src/veniceresch/_generated.py"]
 
 [tool.coverage.report]
 exclude_lines = [

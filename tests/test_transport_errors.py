@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator, Iterator
 import httpx
 import pytest
 
-from venice_sdk import (
+from veniceresch import (
     AsyncVeniceClient,
     VeniceClient,
     VeniceConnectionError,

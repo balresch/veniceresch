@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from venice_sdk import VeniceVideoTimeoutError
+from veniceresch import VeniceVideoTimeoutError
 
 
 async def test_queue_posts_body(mock_api, async_client):

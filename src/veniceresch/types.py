@@ -7,9 +7,9 @@ Two kinds of types live here:
    generator can't emit a top-level class. Those are written out here as
    subclasses of :class:`VeniceBaseModel` so they inherit ``extra=allow``.
 
-2. **Re-exports** of generated classes from :mod:`venice_sdk._generated`
+2. **Re-exports** of generated classes from :mod:`veniceresch._generated`
    that resource methods return — so callers can
-   ``from venice_sdk.types import BillingBalanceResponse`` without
+   ``from veniceresch.types import BillingBalanceResponse`` without
    reaching into the generated module.
 
 All models tolerate unknown fields via the shared base class — Venice adds
@@ -23,8 +23,8 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from venice_sdk._base_model import VeniceBaseModel
-from venice_sdk._generated import (
+from veniceresch._base_model import VeniceBaseModel
+from veniceresch._generated import (
     BillingBalanceResponse,
     BillingUsageAnalyticsResponse,
     BillingUsageResponse,
@@ -136,7 +136,7 @@ class ImageStylesResponse(VeniceBaseModel):
 class GenerateImageResponse(VeniceBaseModel):
     """JSON response from ``POST /image/generate`` (when ``return_binary`` is false).
 
-    For raw bytes, use :meth:`venice_sdk.resources.image.AsyncImageResource.generate_binary`.
+    For raw bytes, use :meth:`veniceresch.resources.image.AsyncImageResource.generate_binary`.
     """
 
     id: str | None = None

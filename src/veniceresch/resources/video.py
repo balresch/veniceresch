@@ -17,10 +17,10 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
-from venice_sdk._errors import VeniceAPIError
+from veniceresch._errors import VeniceAPIError
 
 if TYPE_CHECKING:
-    from venice_sdk._client import AsyncVeniceClient, VeniceClient
+    from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
 _STATUS_PROCESSING = "PROCESSING"

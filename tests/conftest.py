@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for venice-sdk tests."""
+"""Shared pytest fixtures for veniceresch tests."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import httpx
 import pytest
 import respx
 
-from venice_sdk import AsyncVeniceClient, VeniceClient
-from venice_sdk._client import DEFAULT_BASE_URL
+from veniceresch import AsyncVeniceClient, VeniceClient
+from veniceresch._client import DEFAULT_BASE_URL
 
 TEST_API_KEY = "test-key-abc123"
 

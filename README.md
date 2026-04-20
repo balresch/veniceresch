@@ -1,11 +1,6 @@
-# venice-sdk
+# veniceresch
 
 A typed, async-first Python client for the [Venice.ai](https://venice.ai) API.
-
-Built to replace the abandoned community package `venice-ai`
-(`github.com/sethbang/venice-ai`, last release 2025-06-25), which doesn't
-cover `/image/edit`, `/image/multi-edit`, `/video/queue`, `/video/retrieve`,
-and whose `ModelType` literal excludes `"video"`.
 
 ## Why this exists
 
@@ -21,14 +16,14 @@ and whose `ModelType` literal excludes `"video"`.
 ## Install
 
 ```bash
-pip install venice-sdk
+pip install veniceresch
 ```
 
 ## Quickstart
 
 ```python
 import asyncio
-from venice_sdk import AsyncVeniceClient
+from veniceresch import AsyncVeniceClient
 
 async def main():
     async with AsyncVeniceClient(api_key="...") as client:   # or set VENICE_API_KEY
@@ -82,14 +77,14 @@ png_bytes = await client.image.generate_binary(model="flux-dev", prompt="a red c
 # Edit — accepts bytes, Path, base64 string, or URL
 edited = await client.image.edit(image=Path("cat.png"), prompt="make it blue", model="flux-edit")
 
-# Multi-edit (up to 3 images) — missing from the community SDK
+# Multi-edit (up to 3 images)
 combined = await client.image.multi_edit(
     images=[img1_bytes, img2_bytes],
     prompt="merge them",
     model_id="flux-multi-edit",
 )
 
-# Upscale / background-remove — also missing from the community SDK
+# Upscale / background-remove
 upscaled = await client.image.upscale(image=source_png, scale=2.0)
 cutout = await client.image.background_remove(image_url="https://x/pic.png")
 ```
@@ -118,7 +113,7 @@ transcript = await client.audio.transcribe(file=Path("clip.wav"), model="whisper
 ## Models / embeddings / billing
 
 ```python
-models = await client.models.list(type="video")      # "video" works — unlike the old SDK
+models = await client.models.list(type="video")
 emb = await client.embeddings.create(input="hello", model="embed-v1")
 balance = await client.billing.balance()
 ```
@@ -142,7 +137,7 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 | `VeniceTimeoutError` | request or response timed out |
 
 ```python
-from venice_sdk import (
+from veniceresch import (
     VeniceConnectionError,
     VeniceContentViolationError,
     VeniceRateLimitError,
@@ -170,7 +165,7 @@ you need to introspect it.
 ## Sync client
 
 ```python
-from venice_sdk import VeniceClient
+from veniceresch import VeniceClient
 
 with VeniceClient(api_key="...") as client:
     for event in client.chat.completions.create(
@@ -186,13 +181,13 @@ async-only).
 
 Types come from Venice's upstream OpenAPI spec, regenerated via
 `bash scripts/regen_types.sh` (pulls the latest swagger, runs
-`datamodel-code-generator`, writes `src/venice_sdk/_generated.py`). Pass
+`datamodel-code-generator`, writes `src/veniceresch/_generated.py`). Pass
 `--offline` to use the pinned `vendor/venice-swagger.yaml` instead.
 
 ```bash
 pip install -e ".[dev]"
 ruff check . && ruff format --check .
-mypy src/venice_sdk
+mypy src/veniceresch
 pytest                                    # unit tests (offline, respx-mocked)
 VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 ```

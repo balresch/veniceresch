@@ -5,13 +5,13 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from venice_sdk import (
+from veniceresch import (
     AsyncVeniceClient,
     VeniceAPIError,
     VeniceAuthError,
     VeniceClient,
 )
-from venice_sdk._client import DEFAULT_BASE_URL
+from veniceresch._client import DEFAULT_BASE_URL
 
 from .conftest import TEST_API_KEY
 
@@ -46,7 +46,7 @@ def test_base_url_default_and_override():
 def test_auth_header_is_bearer():
     client = AsyncVeniceClient(api_key=TEST_API_KEY)
     assert client._default_headers["Authorization"] == f"Bearer {TEST_API_KEY}"
-    assert client._default_headers["User-Agent"].startswith("venice-sdk-python/")
+    assert client._default_headers["User-Agent"].startswith("veniceresch-python/")
 
 
 def test_default_headers_merged():
@@ -68,7 +68,7 @@ async def test_async_get_sends_auth_header(mock_api, async_client):
     assert route.called
     received = route.calls.last.request
     assert received.headers["authorization"] == f"Bearer {TEST_API_KEY}"
-    assert received.headers["user-agent"].startswith("venice-sdk-python/")
+    assert received.headers["user-agent"].startswith("veniceresch-python/")
 
 
 async def test_async_post_json_body(mock_api, async_client):
@@ -110,7 +110,7 @@ async def test_async_stream_yields_response(mock_api, async_client):
 
 async def test_async_stream_raises_on_error(mock_api, async_client):
     mock_api.post("/chat/completions").respond(429, json={"error": "slow down"})
-    from venice_sdk import VeniceRateLimitError
+    from veniceresch import VeniceRateLimitError
 
     with pytest.raises(VeniceRateLimitError):
         async with async_client._request_stream("POST", "/chat/completions", json_body={}):
@@ -144,7 +144,7 @@ def test_sync_get(mock_api, sync_client):
 
 def test_sync_error_maps(mock_api, sync_client):
     mock_api.get("/models").respond(500, json={"error": "boom"})
-    from venice_sdk import VeniceServerError
+    from veniceresch import VeniceServerError
 
     with pytest.raises(VeniceServerError):
         sync_client._request_json("GET", "/models")

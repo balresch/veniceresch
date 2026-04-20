@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from venice_sdk.types import EmbeddingsResponse
+from veniceresch.types import EmbeddingsResponse
 
 if TYPE_CHECKING:
-    from venice_sdk._client import AsyncVeniceClient, VeniceClient
+    from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
 class AsyncEmbeddingsResource:

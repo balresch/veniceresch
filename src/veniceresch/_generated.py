@@ -7,7 +7,7 @@ from typing import Annotated, Any
 
 from pydantic import AnyUrl, AwareDatetime, ConfigDict, Field, RootModel
 
-from venice_sdk._base_model import VeniceBaseModel
+from veniceresch._base_model import VeniceBaseModel
 
 
 class StandardError(VeniceBaseModel):

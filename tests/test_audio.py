@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 
-from venice_sdk import VeniceAudioTimeoutError
+from veniceresch import VeniceAudioTimeoutError
 
 
 async def test_create_speech_returns_bytes(mock_api, async_client):

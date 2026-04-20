@@ -1,10 +1,9 @@
 """``/image/*`` resource.
 
-Covers the endpoints the abandoned community SDK was missing:
-``/image/edit``, ``/image/multi-edit``, ``/image/upscale``, and
-``/image/background-remove`` (all return raw PNG bytes), plus ``/image/generate``
-(JSON by default, raw bytes via :meth:`AsyncImageResource.generate_binary`)
-and ``/image/styles``.
+Covers ``/image/generate`` (JSON by default, raw bytes via
+:meth:`AsyncImageResource.generate_binary`), ``/image/edit``,
+``/image/multi-edit``, ``/image/upscale``, ``/image/background-remove``
+(all of which return raw PNG bytes), and ``/image/styles``.
 
 Image inputs accept :class:`bytes` (raw image data — we base64-encode for you),
 :class:`str` (already-encoded base64 or a URL — passed through as-is), or
@@ -17,10 +16,10 @@ import base64
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from venice_sdk.types import GenerateImageResponse, ImageStylesResponse
+from veniceresch.types import GenerateImageResponse, ImageStylesResponse
 
 if TYPE_CHECKING:
-    from venice_sdk._client import AsyncVeniceClient, VeniceClient
+    from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
 ImageInput = bytes | str | Path
@@ -82,11 +81,7 @@ class AsyncImageResource:
         model: str | None = None,
         **extra: Any,
     ) -> bytes:
-        """Edit an image with a text prompt. Returns raw PNG bytes.
-
-        This endpoint is missing from the abandoned ``venice-ai`` package; it's
-        one of the reasons this SDK exists.
-        """
+        """Edit an image with a text prompt. Returns raw PNG bytes."""
         body = _drop_none(
             {
                 "image": _encode_image(image),
@@ -107,7 +102,6 @@ class AsyncImageResource:
     ) -> bytes:
         """Edit up to 3 images together. Returns raw PNG bytes.
 
-        Like :meth:`edit`, this endpoint is missing from the community SDK.
         The spec field is ``modelId``; we accept ``model_id`` and translate.
         """
         body = _drop_none(

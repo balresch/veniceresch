@@ -41,3 +41,9 @@ coverage.xml
 .env
 .env.*
 !.env.example
+
+# Local agent configs (Claude Code, etc.)
+.claude/
+
+# Internal planning docs — not part of the published package
+PLAN.md

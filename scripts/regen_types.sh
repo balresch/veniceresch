@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate src/venice_sdk/_generated.py from Venice's upstream OpenAPI spec.
+# Regenerate src/veniceresch/_generated.py from Venice's upstream OpenAPI spec.
 #
 # Usage:
 #   bash scripts/regen_types.sh            # fetch fresh swagger, then generate
@@ -8,7 +8,7 @@ set -euo pipefail
 
 SWAGGER_URL="https://raw.githubusercontent.com/veniceai/api-docs/main/swagger.yaml"
 VENDORED="vendor/venice-swagger.yaml"
-OUT="src/venice_sdk/_generated.py"
+OUT="src/veniceresch/_generated.py"
 
 if [[ "${1:-}" != "--offline" ]]; then
     echo "==> Fetching $SWAGGER_URL"
@@ -23,7 +23,7 @@ datamodel-codegen \
     --input-file-type openapi \
     --output "$OUT" \
     --output-model-type pydantic_v2.BaseModel \
-    --base-class venice_sdk._base_model.VeniceBaseModel \
+    --base-class veniceresch._base_model.VeniceBaseModel \
     --target-python-version 3.10 \
     --use-annotated \
     --use-double-quotes \

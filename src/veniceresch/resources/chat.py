@@ -25,16 +25,16 @@ from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 import httpx
 
-from venice_sdk._errors import translate_httpx_error
-from venice_sdk.resources._sse import aiter_sse_events, iter_sse_events
-from venice_sdk.types import (
+from veniceresch._errors import translate_httpx_error
+from veniceresch.resources._sse import aiter_sse_events, iter_sse_events
+from veniceresch.types import (
     ChatCompletionChunk,
     ChatCompletionResponse,
     ResponsesResponse,
 )
 
 if TYPE_CHECKING:
-    from venice_sdk._client import AsyncVeniceClient, VeniceClient
+    from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
 def _build_body(
@@ -251,9 +251,7 @@ class _AsyncCompletionsSubResource:
             venice_parameters=venice_parameters,
             **extra,
         )
-        return cast(
-            "ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]", result
-        )
+        return cast("ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]", result)
 
     async def stream(
         self,
@@ -424,9 +422,7 @@ class _CompletionsSubResource:
             venice_parameters=venice_parameters,
             **extra,
         )
-        return cast(
-            "ChatCompletionResponse | Iterator[ChatCompletionChunk]", result
-        )
+        return cast("ChatCompletionResponse | Iterator[ChatCompletionChunk]", result)
 
     def stream(
         self,

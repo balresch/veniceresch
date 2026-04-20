@@ -15,9 +15,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `ConfigDict(extra="allow")`, so unknown fields Venice adds later don't
   raise — they land on `.model_extra`. Attribute access everywhere:
   `response.choices[0]` instead of `response["choices"][0]`. Closes #4.
-- `src/venice_sdk/types.py` re-exports the generated and hand-authored
+- `src/veniceresch/types.py` re-exports the generated and hand-authored
   response classes as the public types surface.
-- `src/venice_sdk/_base_model.VeniceBaseModel` — shared base for every
+- `src/veniceresch/_base_model.VeniceBaseModel` — shared base for every
   Pydantic model. Generated classes inherit it via
   `datamodel-codegen --base-class`. `scripts/regen_types.sh` also strips
   the per-class `extra="forbid"` overrides that datamodel-codegen emits
@@ -56,9 +56,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   `httpx.TimeoutException` with `VeniceTimeoutError`). No `httpx` imports
   are needed at call sites anymore.
 
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-04-19
 
-Initial release. Replaces the abandoned community package `venice-ai`.
+Initial release.
 
 ### Added
 
@@ -73,20 +73,18 @@ Initial release. Replaces the abandoned community package `venice-ai`.
   - **Chat**: `client.chat.create`, `client.chat.stream` (SSE),
     `client.chat.create_response` (`/responses`). `venice_parameters`
     pass-through.
-  - **Image**: `generate` / `generate_binary`, `edit`, `multi_edit`, `upscale`,
-    `background_remove`, `list_styles`. **`edit` and `multi_edit` were missing
-    from the community SDK.**
+  - **Image**: `generate` / `generate_binary`, `edit`, `multi_edit`,
+    `upscale`, `background_remove`, `list_styles`.
   - **Video**: `queue`, `retrieve`, `retrieve_binary`, `quote`, `complete`,
     `transcribe`, plus `wait_for_completion` polling helper. Raises
     `VeniceVideoTimeoutError` on deadline.
   - **Audio**: `create_speech` (TTS), `transcribe` (multipart upload),
     queue/retrieve/complete flow mirroring video, `wait_for_completion`.
-  - **Models**: `list`, `list_traits`, `compatibility_mapping`. `type="video"`
-    works (the community SDK's Literal excluded it).
+  - **Models**: `list`, `list_traits`, `compatibility_mapping`.
   - **Embeddings**: `create`.
   - **Billing**: `balance`, `usage`, `usage_analytics`.
 - Auto-generated Pydantic v2 models from Venice's OpenAPI spec
-  (`src/venice_sdk/_generated.py`, 189 models). Regenerate with
+  (`src/veniceresch/_generated.py`, 189 models). Regenerate with
   `bash scripts/regen_types.sh`.
 - Integration smoke suite (`tests/integration/`) gated on `VENICE_API_KEY`.
 - `mypy --strict` clean, `ruff` clean, 97 unit tests.
@@ -94,6 +92,6 @@ Initial release. Replaces the abandoned community package `venice-ai`.
 ### Not yet covered
 
 - `/images/generations` (OpenAI alias — redundant with `/image/generate`)
-- `/augment/scrape`, `/augment/search`, `/augment/text-parser` — planned for v0.2
-- `/characters/*` — planned for v0.2
+- `/augment/scrape`, `/augment/search`, `/augment/text-parser`
+- `/characters/*`
 - `/api_keys/*`, `/x402/*` — out of scope

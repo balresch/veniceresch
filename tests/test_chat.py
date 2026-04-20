@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from venice_sdk import AsyncVeniceClient
+from veniceresch import AsyncVeniceClient
 
 # ---- non-streaming --------------------------------------------------------
 
@@ -74,9 +74,7 @@ async def test_response_tolerates_unknown_fields(mock_api, async_client):
             "brand_new_venice_field": {"shipped_today": True},
         },
     )
-    result = await async_client.chat.create(
-        model="m", messages=[{"role": "user", "content": "h"}]
-    )
+    result = await async_client.chat.create(model="m", messages=[{"role": "user", "content": "h"}])
     assert result.id == "x"
     assert result.model_extra == {"brand_new_venice_field": {"shipped_today": True}}
 
@@ -192,7 +190,7 @@ async def test_stream_sends_stream_true(mock_api, async_client):
 
 
 async def test_stream_raises_error_before_yielding(mock_api, async_client):
-    from venice_sdk import VeniceRateLimitError
+    from veniceresch import VeniceRateLimitError
 
     mock_api.post("/chat/completions").respond(429, json={"error": "slow"})
     with pytest.raises(VeniceRateLimitError):
@@ -297,7 +295,7 @@ def test_sync_stream(mock_api, sync_client):
 
 def test_chat_attribute_exists():
     c = AsyncVeniceClient(api_key="k")
-    from venice_sdk.resources.chat import AsyncChatResource
+    from veniceresch.resources.chat import AsyncChatResource
 
     assert isinstance(c.chat, AsyncChatResource)
 

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from venice_sdk.types import (
+from veniceresch.types import (
     BillingBalanceResponse,
     BillingUsageAnalyticsResponse,
     BillingUsageResponse,
 )
 
 if TYPE_CHECKING:
-    from venice_sdk._client import AsyncVeniceClient, VeniceClient
+    from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
 def _clean_params(params: dict[str, Any]) -> dict[str, Any]:

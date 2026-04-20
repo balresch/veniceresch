@@ -1,7 +1,7 @@
-"""venice-sdk — typed, async-first Python client for the Venice.ai API."""
+"""veniceresch — typed, async-first Python client for the Venice.ai API."""
 
-from venice_sdk._client import AsyncVeniceClient, VeniceClient
-from venice_sdk._errors import (
+from veniceresch._client import AsyncVeniceClient, VeniceClient
+from veniceresch._errors import (
     VeniceAPIError,
     VeniceAuthError,
     VeniceConnectionError,
@@ -14,9 +14,9 @@ from venice_sdk._errors import (
     VeniceTimeoutError,
     VeniceValidationError,
 )
-from venice_sdk._version import __version__
-from venice_sdk.resources.audio import VeniceAudioTimeoutError
-from venice_sdk.resources.video import VeniceVideoTimeoutError
+from veniceresch._version import __version__
+from veniceresch.resources.audio import VeniceAudioTimeoutError
+from veniceresch.resources.video import VeniceVideoTimeoutError
 
 __all__ = [
     "AsyncVeniceClient",

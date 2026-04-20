@@ -4,9 +4,9 @@ Resources import :class:`AsyncVeniceClient` / :class:`VeniceClient` and call
 the internal ``_request_json`` / ``_request_bytes`` / ``_request_stream``
 helpers. Resources never construct httpx requests directly.
 
-This layer is intentionally small. There is no retry / backoff logic —
-lewdresch and other consumers have their own retry layers; we only raise
-typed exceptions so they can dispatch on them. See ``_errors.py``.
+This layer is intentionally small. There is no retry / backoff logic here;
+the SDK only raises typed exceptions so callers can dispatch on them and
+plug in whatever retry policy they prefer. See ``_errors.py``.
 """
 
 from __future__ import annotations
@@ -19,22 +19,22 @@ from typing import Any
 import httpx
 from typing_extensions import Self
 
-from venice_sdk._errors import (
+from veniceresch._errors import (
     raise_for_response,
     translate_httpx_error,
 )
-from venice_sdk._version import __version__
-from venice_sdk.resources.audio import AsyncAudioResource, AudioResource
-from venice_sdk.resources.billing import AsyncBillingResource, BillingResource
-from venice_sdk.resources.chat import AsyncChatResource, ChatResource
-from venice_sdk.resources.embeddings import AsyncEmbeddingsResource, EmbeddingsResource
-from venice_sdk.resources.image import AsyncImageResource, ImageResource
-from venice_sdk.resources.models import AsyncModelsResource, ModelsResource
-from venice_sdk.resources.video import AsyncVideoResource, VideoResource
+from veniceresch._version import __version__
+from veniceresch.resources.audio import AsyncAudioResource, AudioResource
+from veniceresch.resources.billing import AsyncBillingResource, BillingResource
+from veniceresch.resources.chat import AsyncChatResource, ChatResource
+from veniceresch.resources.embeddings import AsyncEmbeddingsResource, EmbeddingsResource
+from veniceresch.resources.image import AsyncImageResource, ImageResource
+from veniceresch.resources.models import AsyncModelsResource, ModelsResource
+from veniceresch.resources.video import AsyncVideoResource, VideoResource
 
 DEFAULT_BASE_URL = "https://api.venice.ai/api/v1"
 DEFAULT_TIMEOUT = 60.0
-_USER_AGENT = f"venice-sdk-python/{__version__}"
+_USER_AGENT = f"veniceresch-python/{__version__}"
 
 
 def _resolve_api_key(api_key: str | None) -> str:

@@ -11,7 +11,13 @@ import os
 
 import pytest
 
-from venice_sdk import AsyncVeniceClient
+from veniceresch import AsyncVeniceClient
+from veniceresch.types import (
+    BillingBalanceResponse,
+    ChatCompletionResponse,
+    ImageStylesResponse,
+    ModelList,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -27,40 +33,39 @@ def api_key() -> str:
 async def test_models_list(api_key: str) -> None:
     async with AsyncVeniceClient(api_key=api_key) as client:
         result = await client.models.list()
-        assert "data" in result or "object" in result
+        assert isinstance(result, ModelList)
+        assert isinstance(result.data, list)
 
 
 async def test_models_list_video(api_key: str) -> None:
-    """Regression: community SDK's ModelType Literal excludes "video"."""
+    """The ``type`` kwarg is a plain str; any value Venice accepts works end-to-end."""
     async with AsyncVeniceClient(api_key=api_key) as client:
         result = await client.models.list(type="video")
-        # If Venice exposes any video models, data is a non-empty list.
-        # If not, we still get a valid 200 — the important thing is no error.
-        assert isinstance(result, dict)
+        assert isinstance(result, ModelList)
 
 
 async def test_billing_balance(api_key: str) -> None:
     async with AsyncVeniceClient(api_key=api_key) as client:
         result = await client.billing.balance()
-        assert isinstance(result, dict)
+        assert isinstance(result, BillingBalanceResponse)
 
 
 async def test_chat_completion_minimal(api_key: str) -> None:
     async with AsyncVeniceClient(api_key=api_key) as client:
         models = await client.models.list(type="text")
-        data = models.get("data", [])
-        if not data:
+        if not models.data:
             pytest.skip("No text models available on this account.")
-        model_id = data[0]["id"]
+        model_id = models.data[0]["id"]
         result = await client.chat.create(
             model=model_id,
             messages=[{"role": "user", "content": "Say 'pong' and nothing else."}],
             max_tokens=10,
         )
-        assert result["choices"][0]["message"]["content"]
+        assert isinstance(result, ChatCompletionResponse)
+        assert result.choices and result.choices[0]["message"]["content"]
 
 
 async def test_image_styles(api_key: str) -> None:
     async with AsyncVeniceClient(api_key=api_key) as client:
         result = await client.image.list_styles()
-        assert "data" in result or isinstance(result, dict)
+        assert isinstance(result, ImageStylesResponse)

@@ -17,8 +17,8 @@ async def test_list_with_type(mock_api, async_client):
 
 
 async def test_list_accepts_video_type(mock_api, async_client):
-    # The whole point of this SDK: accept "video" without a release. The
-    # community SDK's Literal excludes "video" entirely.
+    # Accept any type string without a release — the ``type`` kwarg is a
+    # plain ``str``, not a ``Literal``, so new Venice types just work.
     route = mock_api.get("/models").respond(200, json={"object": "list", "data": []})
     await async_client.models.list(type="video")
     assert b"type=video" in route.calls.last.request.url.query

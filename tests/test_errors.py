@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from venice_sdk import (
+from veniceresch import (
     VeniceAPIError,
     VeniceAuthError,
     VeniceContentViolationError,
@@ -14,7 +14,7 @@ from venice_sdk import (
     VeniceServerError,
     VeniceValidationError,
 )
-from venice_sdk._errors import raise_for_response
+from veniceresch._errors import raise_for_response
 
 
 def test_2xx_response_is_noop(make_response):

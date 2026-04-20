@@ -21,7 +21,7 @@ import httpx
 
 
 class VeniceError(Exception):
-    """Base class for every exception raised by venice-sdk."""
+    """Base class for every exception raised by veniceresch."""
 
 
 class VeniceConnectionError(VeniceError):

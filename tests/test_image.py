@@ -51,7 +51,7 @@ async def test_generate_binary_returns_bytes(mock_api, async_client):
     assert body["return_binary"] is True
 
 
-# ---- edit (gap in community SDK) ------------------------------------------
+# ---- edit ------------------------------------------------------------------
 
 
 async def test_edit_returns_bytes_and_b64_encodes_input(mock_api, async_client):
@@ -85,7 +85,7 @@ async def test_edit_reads_from_path(mock_api, async_client, tmp_path: Path):
     assert body["image"] == SAMPLE_B64
 
 
-# ---- multi_edit (gap in community SDK) ------------------------------------
+# ---- multi_edit ------------------------------------------------------------
 
 
 async def test_multi_edit_uses_camelcase_modelid(mock_api, async_client):

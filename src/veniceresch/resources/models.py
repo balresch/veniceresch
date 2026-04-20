@@ -1,19 +1,18 @@
 """``/models`` resource: list models, traits, and compatibility mapping.
 
 Venice's ``type`` query parameter accepts ``text``, ``image``, ``embedding``,
-``tts``, and ``video`` (among others). The community SDK's ``ModelType``
-literal omits ``"video"`` — this resource takes a plain ``str`` so any value
-Venice adds later just works without an SDK release.
+``tts``, ``video`` (and more). This resource takes a plain ``str`` so any
+value Venice adds later just works without a client release.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from venice_sdk.types import ModelCompatibilityResponse, ModelList, ModelTraitsResponse
+from veniceresch.types import ModelCompatibilityResponse, ModelList, ModelTraitsResponse
 
 if TYPE_CHECKING:
-    from venice_sdk._client import AsyncVeniceClient, VeniceClient
+    from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
 class AsyncModelsResource:
