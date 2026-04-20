@@ -23,6 +23,7 @@ datamodel-codegen \
     --input-file-type openapi \
     --output "$OUT" \
     --output-model-type pydantic_v2.BaseModel \
+    --base-class venice_sdk._base_model.VeniceBaseModel \
     --target-python-version 3.10 \
     --use-annotated \
     --use-double-quotes \

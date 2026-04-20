@@ -5,14 +5,16 @@ from __future__ import annotations
 from enum import Enum, IntEnum
 from typing import Annotated, Any
 
-from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field, RootModel
+from pydantic import AnyUrl, AwareDatetime, ConfigDict, Field, RootModel
+
+from venice_sdk._base_model import VeniceBaseModel
 
 
-class StandardError(BaseModel):
+class StandardError(VeniceBaseModel):
     error: Annotated[str, Field(description="A description of the error")]
 
 
-class DetailedError(BaseModel):
+class DetailedError(VeniceBaseModel):
     details: Annotated[
         dict[str, Any] | None,
         Field(
@@ -23,7 +25,7 @@ class DetailedError(BaseModel):
     error: Annotated[str, Field(description="A description of the error")]
 
 
-class ContentViolationError(BaseModel):
+class ContentViolationError(VeniceBaseModel):
     error: Annotated[str, Field(description="A description of the error")]
     suggested_prompt: Annotated[
         str | None,
@@ -44,7 +46,7 @@ class Code(Enum):
     PAYMENT_REQUIRED = "PAYMENT_REQUIRED"
 
 
-class TopUpInstructions(BaseModel):
+class TopUpInstructions(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -96,7 +98,7 @@ class TopUpInstructions(BaseModel):
     ]
 
 
-class SiwxChallenge(BaseModel):
+class SiwxChallenge(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -147,7 +149,7 @@ class SiwxChallenge(BaseModel):
     ]
 
 
-class X402InferencePaymentRequired(BaseModel):
+class X402InferencePaymentRequired(VeniceBaseModel):
     error: Annotated[Error, Field(description="Error message indicating payment is required.")]
     code: Annotated[Code, Field(description="Machine-readable error code.")]
     message: Annotated[
@@ -182,7 +184,7 @@ class Type(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl(BaseModel):
+class CacheControl(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -203,7 +205,7 @@ class Type1(Enum):
     text = "text"
 
 
-class Content(BaseModel):
+class Content(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl | None,
         Field(
@@ -228,7 +230,7 @@ class Type2(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl1(BaseModel):
+class CacheControl1(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -245,7 +247,7 @@ class CacheControl1(BaseModel):
     ]
 
 
-class ImageUrl(BaseModel):
+class ImageUrl(VeniceBaseModel):
     url: Annotated[
         AnyUrl,
         Field(
@@ -258,7 +260,7 @@ class Type3(Enum):
     image_url = "image_url"
 
 
-class Content1(BaseModel):
+class Content1(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl1 | None,
         Field(
@@ -281,7 +283,7 @@ class Type4(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl2(BaseModel):
+class CacheControl2(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -310,7 +312,7 @@ class Format(Enum):
     pcm24 = "pcm24"
 
 
-class InputAudio(BaseModel):
+class InputAudio(VeniceBaseModel):
     data: Annotated[
         str,
         Field(
@@ -330,7 +332,7 @@ class Type5(Enum):
     input_audio = "input_audio"
 
 
-class Content2(BaseModel):
+class Content2(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl2 | None,
         Field(
@@ -353,7 +355,7 @@ class Type6(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl3(BaseModel):
+class CacheControl3(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -374,7 +376,7 @@ class Type7(Enum):
     video_url = "video_url"
 
 
-class VideoUrl(BaseModel):
+class VideoUrl(VeniceBaseModel):
     url: Annotated[
         AnyUrl,
         Field(
@@ -383,7 +385,7 @@ class VideoUrl(BaseModel):
     ]
 
 
-class Content3(BaseModel):
+class Content3(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl3 | None,
         Field(
@@ -406,7 +408,7 @@ class Role(Enum):
     user = "user"
 
 
-class Messages(BaseModel):
+class Messages(VeniceBaseModel):
     content: str | list[Content | Content1 | Content2 | Content3]
     name: str | None = None
     role: Role
@@ -416,7 +418,7 @@ class Type8(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl4(BaseModel):
+class CacheControl4(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -437,7 +439,7 @@ class Type9(Enum):
     text = "text"
 
 
-class ContentItem(BaseModel):
+class ContentItem(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl4 | None,
         Field(
@@ -458,7 +460,7 @@ class ContentItem(BaseModel):
     type: Annotated[Type9, Field(title="Text Content String")]
 
 
-class ReasoningDetail(BaseModel):
+class ReasoningDetail(VeniceBaseModel):
     data: str | None = None
     format: str | None = None
     id: str | None = None
@@ -471,7 +473,7 @@ class Role1(Enum):
     assistant = "assistant"
 
 
-class Messages1(BaseModel):
+class Messages1(VeniceBaseModel):
     content: str | list[ContentItem] | Any | None = None
     name: str | None = None
     reasoning_content: str | None = None
@@ -489,7 +491,7 @@ class Role2(Enum):
     tool = "tool"
 
 
-class Messages2(BaseModel):
+class Messages2(VeniceBaseModel):
     content: str
     name: str | None = None
     reasoning_content: str | None = None
@@ -502,7 +504,7 @@ class Type10(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl5(BaseModel):
+class CacheControl5(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -523,7 +525,7 @@ class Type11(Enum):
     text = "text"
 
 
-class ContentItem1(BaseModel):
+class ContentItem1(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl5 | None,
         Field(
@@ -548,7 +550,7 @@ class Role3(Enum):
     system = "system"
 
 
-class Messages3(BaseModel):
+class Messages3(VeniceBaseModel):
     content: str | list[ContentItem1]
     name: str | None = None
     role: Role3
@@ -558,7 +560,7 @@ class Type12(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl6(BaseModel):
+class CacheControl6(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -579,7 +581,7 @@ class Type13(Enum):
     text = "text"
 
 
-class ContentItem2(BaseModel):
+class ContentItem2(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl6 | None,
         Field(
@@ -604,7 +606,7 @@ class Role4(Enum):
     developer = "developer"
 
 
-class Messages4(BaseModel):
+class Messages4(VeniceBaseModel):
     content: str | list[ContentItem2]
     name: str | None = None
     role: Role4
@@ -632,7 +634,7 @@ class Summary(Enum):
     detailed = "detailed"
 
 
-class Reasoning(BaseModel):
+class Reasoning(VeniceBaseModel):
     effort: Annotated[
         Effort | None,
         Field(
@@ -671,7 +673,7 @@ class Stop(RootModel[list[str]]):
     ]
 
 
-class StreamOptions(BaseModel):
+class StreamOptions(VeniceBaseModel):
     include_usage: Annotated[
         bool | None,
         Field(description="Whether to include usage information in the stream."),
@@ -685,7 +687,7 @@ class Verbosity(Enum):
     auto = "auto"
 
 
-class Text(BaseModel):
+class Text(VeniceBaseModel):
     verbosity: Annotated[
         Verbosity | None,
         Field(description="Controls the verbosity of the text response.", examples=["low"]),
@@ -698,7 +700,7 @@ class EnableWebSearch(Enum):
     on = "on"
 
 
-class VeniceParameters(BaseModel):
+class VeniceParameters(VeniceBaseModel):
     character_slug: Annotated[
         str | None,
         Field(
@@ -777,7 +779,7 @@ class Type14(Enum):
     json_schema = "json_schema"
 
 
-class ResponseFormat(BaseModel):
+class ResponseFormat(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -789,7 +791,7 @@ class Type15(Enum):
     json_object = "json_object"
 
 
-class ResponseFormat1(BaseModel):
+class ResponseFormat1(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -800,18 +802,18 @@ class Type16(Enum):
     text = "text"
 
 
-class ResponseFormat2(BaseModel):
+class ResponseFormat2(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
     type: Type16
 
 
-class Function(BaseModel):
+class Function(VeniceBaseModel):
     name: str
 
 
-class ToolChoice(BaseModel):
+class ToolChoice(VeniceBaseModel):
     function: Function
     type: str
 
@@ -821,11 +823,11 @@ class Type17(Enum):
     x_search = "x_search"
 
 
-class Tools(BaseModel):
+class Tools(VeniceBaseModel):
     type: Type17
 
 
-class Function1(BaseModel):
+class Function1(VeniceBaseModel):
     description: str | None = None
     name: str
     parameters: dict[str, Any] | None = None
@@ -838,13 +840,13 @@ class Function1(BaseModel):
     ] = False
 
 
-class Tools1(BaseModel):
+class Tools1(VeniceBaseModel):
     function: Function1
     id: str | None = None
     type: str | None = None
 
 
-class ChatCompletionRequest(BaseModel):
+class ChatCompletionRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -1082,7 +1084,7 @@ class Type18(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl7(BaseModel):
+class CacheControl7(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -1099,7 +1101,7 @@ class CacheControl7(BaseModel):
     ]
 
 
-class InputAudio1(BaseModel):
+class InputAudio1(VeniceBaseModel):
     data: Annotated[
         str,
         Field(
@@ -1119,7 +1121,7 @@ class Type19(Enum):
     input_audio = "input_audio"
 
 
-class ChatCompletionContentPartInputAudio(BaseModel):
+class ChatCompletionContentPartInputAudio(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl7 | None,
         Field(
@@ -1142,7 +1144,7 @@ class Type20(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl8(BaseModel):
+class CacheControl8(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -1163,7 +1165,7 @@ class Type21(Enum):
     video_url = "video_url"
 
 
-class ChatCompletionContentPartVideoUrl(BaseModel):
+class ChatCompletionContentPartVideoUrl(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl8 | None,
         Field(
@@ -1197,7 +1199,7 @@ class Type23(Enum):
     input_text = "input_text"
 
 
-class Content4(BaseModel):
+class Content4(VeniceBaseModel):
     type: Type23
     text: str
 
@@ -1212,12 +1214,12 @@ class Detail(Enum):
     high = "high"
 
 
-class ImageUrl1(BaseModel):
+class ImageUrl1(VeniceBaseModel):
     url: str
     detail: Detail | None = None
 
 
-class Content5(BaseModel):
+class Content5(VeniceBaseModel):
     type: Type24
     image_url: ImageUrl1
 
@@ -1226,7 +1228,7 @@ class Type25(Enum):
     output_text = "output_text"
 
 
-class Content6(BaseModel):
+class Content6(VeniceBaseModel):
     type: Type25
     text: str
     annotations: list[Any] | None = None
@@ -1237,7 +1239,7 @@ class Status(Enum):
     in_progress = "in_progress"
 
 
-class Input(BaseModel):
+class Input(VeniceBaseModel):
     type: Type22
     role: Role5
     content: str | list[Content4 | Content5 | Content6]
@@ -1249,7 +1251,7 @@ class Type26(Enum):
     input_text = "input_text"
 
 
-class Content7(BaseModel):
+class Content7(VeniceBaseModel):
     type: Type26
     text: str
 
@@ -1258,12 +1260,12 @@ class Type27(Enum):
     input_image = "input_image"
 
 
-class ImageUrl2(BaseModel):
+class ImageUrl2(VeniceBaseModel):
     url: str
     detail: Detail | None = None
 
 
-class Content8(BaseModel):
+class Content8(VeniceBaseModel):
     type: Type27
     image_url: ImageUrl2
 
@@ -1272,7 +1274,7 @@ class Type28(Enum):
     output_text = "output_text"
 
 
-class Content9(BaseModel):
+class Content9(VeniceBaseModel):
     type: Type28
     text: str
     annotations: list[Any] | None = None
@@ -1282,7 +1284,7 @@ class Type29(Enum):
     text = "text"
 
 
-class Content10(BaseModel):
+class Content10(VeniceBaseModel):
     type: Type29
     text: str
 
@@ -1291,17 +1293,17 @@ class Type30(Enum):
     image_url = "image_url"
 
 
-class ImageUrl3(BaseModel):
+class ImageUrl3(VeniceBaseModel):
     url: str
     detail: Detail | None = None
 
 
-class Content11(BaseModel):
+class Content11(VeniceBaseModel):
     type: Type30
     image_url: str | ImageUrl3
 
 
-class Input1(BaseModel):
+class Input1(VeniceBaseModel):
     role: Role5
     content: str | list[Content7 | Content8 | Content9 | Content10 | Content11]
     id: str | None = None
@@ -1312,7 +1314,7 @@ class Type31(Enum):
     reasoning = "reasoning"
 
 
-class Input2(BaseModel):
+class Input2(VeniceBaseModel):
     type: Type31
     id: str | None = None
     summary: list[str] | None = None
@@ -1325,7 +1327,7 @@ class Type32(Enum):
     function_call = "function_call"
 
 
-class Input3(BaseModel):
+class Input3(VeniceBaseModel):
     type: Type32
     id: str | None = None
     call_id: str
@@ -1338,7 +1340,7 @@ class Type33(Enum):
     function_call_output = "function_call_output"
 
 
-class Input4(BaseModel):
+class Input4(VeniceBaseModel):
     type: Type33
     call_id: str
     output: str | list[Any] | dict[str, Any] | float | bool | Any
@@ -1348,12 +1350,12 @@ class Type34(Enum):
     item_reference = "item_reference"
 
 
-class Input5(BaseModel):
+class Input5(VeniceBaseModel):
     type: Type34
     id: str
 
 
-class Reasoning1(BaseModel):
+class Reasoning1(VeniceBaseModel):
     effort: Annotated[
         Effort | None,
         Field(description="Controls reasoning effort level for supported models."),
@@ -1367,14 +1369,14 @@ class Type35(Enum):
     function = "function"
 
 
-class Function2(BaseModel):
+class Function2(VeniceBaseModel):
     name: str
     description: str | None = None
     parameters: dict[str, Any] | None = None
     strict: bool | None = None
 
 
-class Tools2(BaseModel):
+class Tools2(VeniceBaseModel):
     type: Type35
     function: Function2
 
@@ -1393,7 +1395,7 @@ class Type37(Enum):
     approximate = "approximate"
 
 
-class UserLocation(BaseModel):
+class UserLocation(VeniceBaseModel):
     type: Type37 | None = None
     city: str | None = None
     region: str | None = None
@@ -1401,7 +1403,7 @@ class UserLocation(BaseModel):
     timezone: str | None = None
 
 
-class Tools3(BaseModel):
+class Tools3(VeniceBaseModel):
     type: Type36
     search_context_size: SearchContextSize | None = None
     user_location: UserLocation | None = None
@@ -1411,7 +1413,7 @@ class Type38(Enum):
     x_search = "x_search"
 
 
-class Tools4(BaseModel):
+class Tools4(VeniceBaseModel):
     type: Type38
     allowed_x_handles: Annotated[list[str] | None, Field(max_length=10)] = None
     excluded_x_handles: Annotated[list[str] | None, Field(max_length=10)] = None
@@ -1425,11 +1427,11 @@ class Type39(Enum):
     code_interpreter = "code_interpreter"
 
 
-class Container(BaseModel):
+class Container(VeniceBaseModel):
     image: str | None = None
 
 
-class Tools5(BaseModel):
+class Tools5(VeniceBaseModel):
     type: Type39
     container: Container | None = None
 
@@ -1438,12 +1440,12 @@ class Type40(Enum):
     file_search = "file_search"
 
 
-class RankingOptions(BaseModel):
+class RankingOptions(VeniceBaseModel):
     ranker: str | None = None
     score_threshold: float | None = None
 
 
-class Tools6(BaseModel):
+class Tools6(VeniceBaseModel):
     type: Type40
     vector_store_ids: list[str] | None = None
     max_num_results: int | None = None
@@ -1454,14 +1456,14 @@ class Type41(Enum):
     computer_use_preview = "computer_use_preview"
 
 
-class Tools7(BaseModel):
+class Tools7(VeniceBaseModel):
     type: Type41
     display_width: int | None = None
     display_height: int | None = None
     environment: str | None = None
 
 
-class Tools8(BaseModel):
+class Tools8(VeniceBaseModel):
     type: str
 
 
@@ -1481,16 +1483,16 @@ class Type42(Enum):
     function = "function"
 
 
-class Function3(BaseModel):
+class Function3(VeniceBaseModel):
     name: str
 
 
-class ToolChoice4(BaseModel):
+class ToolChoice4(VeniceBaseModel):
     type: Type42
     function: Function3
 
 
-class VeniceParameters1(BaseModel):
+class VeniceParameters1(VeniceBaseModel):
     character_slug: Annotated[
         str | None,
         Field(description="The character slug of a public Venice character."),
@@ -1521,7 +1523,7 @@ class VeniceParameters1(BaseModel):
     ] = None
 
 
-class ResponsesRequest(BaseModel):
+class ResponsesRequest(VeniceBaseModel):
     model: Annotated[
         str,
         Field(
@@ -1582,7 +1584,7 @@ class Type43(Enum):
     reasoning = "reasoning"
 
 
-class Output(BaseModel):
+class Output(VeniceBaseModel):
     type: Type43
     id: str
     summary: list[str] | None = None
@@ -1611,7 +1613,7 @@ class Type46(Enum):
     url_citation = "url_citation"
 
 
-class Annotation(BaseModel):
+class Annotation(VeniceBaseModel):
     type: Type46
     url: str
     title: str | None = None
@@ -1619,13 +1621,13 @@ class Annotation(BaseModel):
     end_index: int
 
 
-class ContentItem3(BaseModel):
+class ContentItem3(VeniceBaseModel):
     type: Type45
     text: str
     annotations: list[Annotation] | None = None
 
 
-class Output1(BaseModel):
+class Output1(VeniceBaseModel):
     type: Type44
     id: str
     status: Status5
@@ -1642,7 +1644,7 @@ class Status6(Enum):
     in_progress = "in_progress"
 
 
-class Output2(BaseModel):
+class Output2(VeniceBaseModel):
     type: Type47
     id: str
     call_id: str
@@ -1659,21 +1661,21 @@ class Status7(Enum):
     completed = "completed"
 
 
-class Output3(BaseModel):
+class Output3(VeniceBaseModel):
     type: Type48
     id: str
     status: Status7
 
 
-class InputTokensDetails(BaseModel):
+class InputTokensDetails(VeniceBaseModel):
     cached_tokens: int | None = None
 
 
-class OutputTokensDetails(BaseModel):
+class OutputTokensDetails(VeniceBaseModel):
     reasoning_tokens: int | None = None
 
 
-class Usage(BaseModel):
+class Usage(VeniceBaseModel):
     input_tokens: int
     input_tokens_details: InputTokensDetails | None = None
     output_tokens: int
@@ -1681,12 +1683,12 @@ class Usage(BaseModel):
     total_tokens: int
 
 
-class Error1(BaseModel):
+class Error1(VeniceBaseModel):
     code: str
     message: str
 
 
-class ResponsesResponse(BaseModel):
+class ResponsesResponse(VeniceBaseModel):
     id: Annotated[
         str,
         Field(description="Unique identifier for the response.", examples=["resp_abc123"]),
@@ -1716,7 +1718,7 @@ class Format2(Enum):
     webp = "webp"
 
 
-class GenerateImageRequest(BaseModel):
+class GenerateImageRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -1914,7 +1916,7 @@ class Style(Enum):
     natural = "natural"
 
 
-class SimpleGenerateImageRequest(BaseModel):
+class SimpleGenerateImageRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2011,7 +2013,7 @@ class Enhance(Enum):
     false = "false"
 
 
-class UpscaleImageRequest(BaseModel):
+class UpscaleImageRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2077,7 +2079,7 @@ class AspectRatio(Enum):
     field_245 = 245
 
 
-class EditImageRequest(BaseModel):
+class EditImageRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2124,7 +2126,7 @@ class EditImageRequest(BaseModel):
     ] = True
 
 
-class MultiEditImageRequest(BaseModel):
+class MultiEditImageRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2155,7 +2157,7 @@ class MultiEditImageRequest(BaseModel):
     ] = True
 
 
-class MultiEditImageMultipartRequest(BaseModel):
+class MultiEditImageMultipartRequest(VeniceBaseModel):
     modelId: Annotated[
         str | None,
         Field(description="The model ID to use for multi-edit.", min_length=1),
@@ -2185,7 +2187,7 @@ class MultiEditImageMultipartRequest(BaseModel):
     ] = True
 
 
-class BackgroundRemoveImageRequest(BaseModel):
+class BackgroundRemoveImageRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2280,7 +2282,7 @@ class Model(Enum):
     text_embedding_nemotron_embed_vl_1b_v2 = "text-embedding-nemotron-embed-vl-1b-v2"
 
 
-class CreateEmbeddingRequestSchema(BaseModel):
+class CreateEmbeddingRequestSchema(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2476,7 +2478,7 @@ class Voice(Enum):
     ElegantMan = "ElegantMan"
 
 
-class CreateSpeechRequestSchema(BaseModel):
+class CreateSpeechRequestSchema(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2570,7 +2572,7 @@ class ResponseFormat5(Enum):
     text = "text"
 
 
-class CreateTranscriptionRequestSchema(BaseModel):
+class CreateTranscriptionRequestSchema(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2666,13 +2668,13 @@ class UpscaleFactor(IntEnum):
     integer_4 = 4
 
 
-class Element(BaseModel):
+class Element(VeniceBaseModel):
     frontal_image_url: str | None = None
     reference_image_urls: Annotated[list[str] | None, Field(max_length=3)] = None
     video_url: str | None = None
 
 
-class QueueVideoRequest(BaseModel):
+class QueueVideoRequest(VeniceBaseModel):
     model: Annotated[
         str,
         Field(
@@ -2793,7 +2795,7 @@ class QueueVideoRequest(BaseModel):
     ] = None
 
 
-class QuoteVideoRequest(BaseModel):
+class QuoteVideoRequest(VeniceBaseModel):
     model: Annotated[
         str,
         Field(
@@ -2842,7 +2844,7 @@ class QuoteVideoRequest(BaseModel):
     ] = None
 
 
-class CompleteVideoRequest(BaseModel):
+class CompleteVideoRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2862,7 +2864,7 @@ class CompleteVideoRequest(BaseModel):
     ]
 
 
-class RetrieveVideoRequest(BaseModel):
+class RetrieveVideoRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2889,7 +2891,7 @@ class RetrieveVideoRequest(BaseModel):
     ] = False
 
 
-class CreateVideoTranscriptionRequestSchema(BaseModel):
+class CreateVideoTranscriptionRequestSchema(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -2909,7 +2911,7 @@ class CreateVideoTranscriptionRequestSchema(BaseModel):
     ] = "json"
 
 
-class TextParserRequest(BaseModel):
+class TextParserRequest(VeniceBaseModel):
     file: Annotated[
         bytes | None,
         Field(
@@ -2925,7 +2927,7 @@ class TextParserRequest(BaseModel):
     ] = "json"
 
 
-class TextParserResponse(BaseModel):
+class TextParserResponse(VeniceBaseModel):
     text: Annotated[str, Field(description="The extracted text content from the document.")]
     tokens: Annotated[float, Field(description="The token count of the extracted text.")]
 
@@ -2952,7 +2954,7 @@ class DurationSeconds1(RootModel[str]):
     ]
 
 
-class QueueAudioRequest(BaseModel):
+class QueueAudioRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3046,7 +3048,7 @@ class DurationSeconds3(RootModel[str]):
     ]
 
 
-class QuoteAudioRequest(BaseModel):
+class QuoteAudioRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3074,7 +3076,7 @@ class QuoteAudioRequest(BaseModel):
     ] = None
 
 
-class CompleteAudioRequest(BaseModel):
+class CompleteAudioRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3094,7 +3096,7 @@ class CompleteAudioRequest(BaseModel):
     ]
 
 
-class RetrieveAudioRequest(BaseModel):
+class RetrieveAudioRequest(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3128,7 +3130,7 @@ class ConsumptionCurrency(Enum):
     BUNDLED_CREDITS = "BUNDLED_CREDITS"
 
 
-class Balances(BaseModel):
+class Balances(VeniceBaseModel):
     diem: Annotated[
         float,
         Field(
@@ -3142,7 +3144,7 @@ class Balances(BaseModel):
     ]
 
 
-class BillingBalanceResponse(BaseModel):
+class BillingBalanceResponse(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3182,7 +3184,7 @@ class SortOrder(Enum):
     desc = "desc"
 
 
-class BillingUsageRequest(BaseModel):
+class BillingUsageRequest(VeniceBaseModel):
     currency: Annotated[
         Currency | None, Field(description="Filter by currency", examples=["USD"])
     ] = None
@@ -3213,7 +3215,7 @@ class BillingUsageRequest(BaseModel):
     ] = None
 
 
-class InferenceDetails(BaseModel):
+class InferenceDetails(VeniceBaseModel):
     completionTokens: Annotated[
         float,
         Field(description="Number of tokens used in the completion. Only present for LLM usage."),
@@ -3228,7 +3230,7 @@ class InferenceDetails(BaseModel):
     requestId: Annotated[str, Field(description="Unique identifier for the inference request")]
 
 
-class Datum(BaseModel):
+class Datum(VeniceBaseModel):
     amount: Annotated[
         float, Field(description="The total amount charged for the billing usage entry")
     ]
@@ -3256,14 +3258,14 @@ class Datum(BaseModel):
     units: Annotated[float, Field(description="The number of units consumed")]
 
 
-class Pagination(BaseModel):
+class Pagination(VeniceBaseModel):
     limit: float
     page: float
     total: float
     totalPages: float
 
 
-class BillingUsageResponse(BaseModel):
+class BillingUsageResponse(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3277,7 +3279,7 @@ class BillingUsageResponse(BaseModel):
     pagination: Pagination
 
 
-class BillingUsageAnalyticsRequest(BaseModel):
+class BillingUsageAnalyticsRequest(VeniceBaseModel):
     lookback: Annotated[
         str | None,
         Field(
@@ -3304,13 +3306,13 @@ class BillingUsageAnalyticsRequest(BaseModel):
     ] = None
 
 
-class ByDateItem(BaseModel):
+class ByDateItem(VeniceBaseModel):
     date: Annotated[str, Field(description="Date in YYYY-MM-DD format", examples=["2024-01-15"])]
     USD: Annotated[float, Field(description="Total USD usage for this date")]
     DIEM: Annotated[float, Field(description="Total DIEM usage for this date")]
 
 
-class BreakdownItem(BaseModel):
+class BreakdownItem(VeniceBaseModel):
     type: Annotated[
         str,
         Field(description='Token type (e.g., "Input", "Output", "Cache Read", "Cache Write")'),
@@ -3320,7 +3322,7 @@ class BreakdownItem(BaseModel):
     units: Annotated[float, Field(description="Number of units for this breakdown")]
 
 
-class ByModelItem(BaseModel):
+class ByModelItem(VeniceBaseModel):
     modelName: Annotated[
         str, Field(description="Display name of the model", examples=["Llama 3.3 70B"])
     ]
@@ -3344,7 +3346,7 @@ class ByModelItem(BaseModel):
     ] = None
 
 
-class ByKeyItem(BaseModel):
+class ByKeyItem(VeniceBaseModel):
     apiKeyId: Annotated[str, Field(description="API key ID, or null if usage was from web app")]
     description: Annotated[
         str,
@@ -3358,7 +3360,7 @@ class ByKeyItem(BaseModel):
     totalUnits: Annotated[float, Field(description="Total units consumed for this key")]
 
 
-class BillingUsageAnalyticsResponse(BaseModel):
+class BillingUsageAnalyticsResponse(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3403,7 +3405,7 @@ class BillingUsageAnalyticsResponse(BaseModel):
     ]
 
 
-class WebScrapeRequest(BaseModel):
+class WebScrapeRequest(VeniceBaseModel):
     url: Annotated[AnyUrl, Field(description="The URL to scrape", examples=["https://example.com"])]
 
 
@@ -3412,7 +3414,7 @@ class SearchProvider(Enum):
     brave = "brave"
 
 
-class WebSearchRequest(BaseModel):
+class WebSearchRequest(VeniceBaseModel):
     query: Annotated[
         str,
         Field(
@@ -3445,7 +3447,7 @@ class Privacy(Enum):
     anonymized = "anonymized"
 
 
-class Deprecation(BaseModel):
+class Deprecation(VeniceBaseModel):
     date: Annotated[
         str,
         Field(
@@ -3465,7 +3467,7 @@ class Quantization(Enum):
     not_available = "not-available"
 
 
-class Capabilities(BaseModel):
+class Capabilities(VeniceBaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
@@ -3555,7 +3557,7 @@ class Capabilities(BaseModel):
     ]
 
 
-class Steps(BaseModel):
+class Steps(VeniceBaseModel):
     default: Annotated[
         float, Field(description="The default steps value for the model", examples=[25])
     ]
@@ -3565,7 +3567,7 @@ class Steps(BaseModel):
     ]
 
 
-class Constraints(BaseModel):
+class Constraints(VeniceBaseModel):
     aspectRatios: Annotated[
         list[str] | None,
         Field(
@@ -3608,21 +3610,21 @@ class Constraints(BaseModel):
     ]
 
 
-class Temperature(BaseModel):
+class Temperature(VeniceBaseModel):
     default: Annotated[
         float,
         Field(description="The default temperature value for the model", examples=[0.7]),
     ]
 
 
-class TopP(BaseModel):
+class TopP(VeniceBaseModel):
     default: Annotated[
         float,
         Field(description="The default top_p value for the model", examples=[0.9]),
     ]
 
 
-class FrequencyPenalty(BaseModel):
+class FrequencyPenalty(VeniceBaseModel):
     default: Annotated[
         float,
         Field(
@@ -3632,14 +3634,14 @@ class FrequencyPenalty(BaseModel):
     ]
 
 
-class PresencePenalty(BaseModel):
+class PresencePenalty(VeniceBaseModel):
     default: Annotated[
         float,
         Field(description="The default presence_penalty value for the model", examples=[0]),
     ]
 
 
-class RepetitionPenalty(BaseModel):
+class RepetitionPenalty(VeniceBaseModel):
     default: Annotated[
         float,
         Field(
@@ -3649,7 +3651,7 @@ class RepetitionPenalty(BaseModel):
     ]
 
 
-class Constraints1(BaseModel):
+class Constraints1(VeniceBaseModel):
     temperature: Temperature
     top_p: TopP
     frequency_penalty: FrequencyPenalty | None = None
@@ -3663,7 +3665,7 @@ class ModelType(Enum):
     video = "video"
 
 
-class Constraints2(BaseModel):
+class Constraints2(VeniceBaseModel):
     aspect_ratios: Annotated[
         list[str],
         Field(
@@ -3709,7 +3711,7 @@ class Constraints2(BaseModel):
     ] = None
 
 
-class Constraints3(BaseModel):
+class Constraints3(VeniceBaseModel):
     aspectRatios: Annotated[
         list[str],
         Field(
@@ -3730,12 +3732,12 @@ class Constraints3(BaseModel):
     ]
 
 
-class Input10(BaseModel):
+class Input10(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost per million input tokens", examples=[0.7])]
     diem: Annotated[float, Field(description="Diem cost per million input tokens", examples=[7])]
 
 
-class CacheInput(BaseModel):
+class CacheInput(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(
@@ -3752,7 +3754,7 @@ class CacheInput(BaseModel):
     ]
 
 
-class CacheWrite(BaseModel):
+class CacheWrite(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(
@@ -3769,12 +3771,12 @@ class CacheWrite(BaseModel):
     ]
 
 
-class Output4(BaseModel):
+class Output4(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost per million output tokens", examples=[2.8])]
     diem: Annotated[float, Field(description="Diem cost per million output tokens", examples=[28])]
 
 
-class Input11(BaseModel):
+class Input11(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(
@@ -3791,7 +3793,7 @@ class Input11(BaseModel):
     ]
 
 
-class Output5(BaseModel):
+class Output5(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(
@@ -3808,7 +3810,7 @@ class Output5(BaseModel):
     ]
 
 
-class CacheInput1(BaseModel):
+class CacheInput1(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(
@@ -3825,7 +3827,7 @@ class CacheInput1(BaseModel):
     ]
 
 
-class CacheWrite1(BaseModel):
+class CacheWrite1(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(
@@ -3842,7 +3844,7 @@ class CacheWrite1(BaseModel):
     ]
 
 
-class Extended(BaseModel):
+class Extended(VeniceBaseModel):
     context_token_threshold: Annotated[
         float,
         Field(
@@ -3856,7 +3858,7 @@ class Extended(BaseModel):
     cache_write: CacheWrite1 | None = None
 
 
-class Pricing(BaseModel):
+class Pricing(VeniceBaseModel):
     input: Input10
     cache_input: Annotated[
         CacheInput | None,
@@ -3879,7 +3881,7 @@ class Pricing(BaseModel):
     ] = None
 
 
-class Generation(BaseModel):
+class Generation(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(description="USD cost per image generation (base price)", examples=[0.01]),
@@ -3890,27 +3892,27 @@ class Generation(BaseModel):
     ]
 
 
-class Resolutions(BaseModel):
+class Resolutions(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost for this resolution", examples=[0.18])]
     diem: Annotated[float, Field(description="Diem cost for this resolution", examples=[0.18])]
 
 
-class Field2x(BaseModel):
+class Field2x(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost for 2x upscale", examples=[0.02])]
     diem: Annotated[float, Field(description="Diem cost for 2x upscale", examples=[0.2])]
 
 
-class Field4x(BaseModel):
+class Field4x(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost for 4x upscale", examples=[0.08])]
     diem: Annotated[float, Field(description="Diem cost for 4x upscale", examples=[0.8])]
 
 
-class Upscale(BaseModel):
+class Upscale(VeniceBaseModel):
     field_2x: Annotated[Field2x, Field(alias="2x")]
     field_4x: Annotated[Field4x, Field(alias="4x")]
 
 
-class Pricing1(BaseModel):
+class Pricing1(VeniceBaseModel):
     generation: Annotated[
         Generation | None,
         Field(
@@ -3933,7 +3935,7 @@ class Pricing1(BaseModel):
     upscale: Upscale
 
 
-class Input12(BaseModel):
+class Input12(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(description="USD cost per million input characters", examples=[3.5]),
@@ -3944,20 +3946,20 @@ class Input12(BaseModel):
     ]
 
 
-class Pricing2(BaseModel):
+class Pricing2(VeniceBaseModel):
     input: Input12
 
 
-class PerAudioSecond(BaseModel):
+class PerAudioSecond(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost per audio second", examples=[0.0001])]
     diem: Annotated[float, Field(description="Diem cost per audio second", examples=[0.0001])]
 
 
-class Pricing3(BaseModel):
+class Pricing3(VeniceBaseModel):
     per_audio_second: PerAudioSecond
 
 
-class Inpaint(BaseModel):
+class Inpaint(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(description="USD cost per image edit/inpaint operation", examples=[0.04]),
@@ -3968,20 +3970,20 @@ class Inpaint(BaseModel):
     ]
 
 
-class Pricing4(BaseModel):
+class Pricing4(VeniceBaseModel):
     inpaint: Inpaint
 
 
-class Generation1(BaseModel):
+class Generation1(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost per music generation", examples=[0.02])]
     diem: Annotated[float, Field(description="Diem cost per music generation", examples=[0.02])]
 
 
-class Pricing5(BaseModel):
+class Pricing5(VeniceBaseModel):
     generation: Generation1
 
 
-class Durations(BaseModel):
+class Durations(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost for this duration tier", examples=[0.87])]
     diem: Annotated[float, Field(description="Diem cost for this duration tier", examples=[0.87])]
     min_seconds: Annotated[
@@ -4000,11 +4002,11 @@ class Durations(BaseModel):
     ]
 
 
-class Pricing6(BaseModel):
+class Pricing6(VeniceBaseModel):
     durations: dict[str, Durations]
 
 
-class PerSecond(BaseModel):
+class PerSecond(VeniceBaseModel):
     usd: Annotated[
         float,
         Field(description="USD cost per second of generated music", examples=[0.005]),
@@ -4015,20 +4017,20 @@ class PerSecond(BaseModel):
     ]
 
 
-class Pricing7(BaseModel):
+class Pricing7(VeniceBaseModel):
     per_second: PerSecond
 
 
-class PerThousandCharacters(BaseModel):
+class PerThousandCharacters(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost per thousand characters", examples=[0.01])]
     diem: Annotated[float, Field(description="Diem cost per thousand characters", examples=[0.01])]
 
 
-class Pricing8(BaseModel):
+class Pricing8(VeniceBaseModel):
     per_thousand_characters: PerThousandCharacters
 
 
-class ModelSpec(BaseModel):
+class ModelSpec(VeniceBaseModel):
     availableContextTokens: Annotated[
         float | None,
         Field(
@@ -4288,7 +4290,7 @@ class Type49(Enum):
     video = "video"
 
 
-class ModelResponse(BaseModel):
+class ModelResponse(VeniceBaseModel):
     created: Annotated[
         float | None,
         Field(description="Release date on Venice API", examples=[1699000000]),
@@ -4312,7 +4314,7 @@ class Format3(Enum):
     markdown = "markdown"
 
 
-class WebScrapeResponse(BaseModel):
+class WebScrapeResponse(VeniceBaseModel):
     url: Annotated[
         str,
         Field(description="The URL that was scraped", examples=["https://example.com"]),
@@ -4321,13 +4323,13 @@ class WebScrapeResponse(BaseModel):
     format: Annotated[Format3, Field(description="The format of the scraped content")]
 
 
-class Result(BaseModel):
+class Result(VeniceBaseModel):
     title: Annotated[str, Field(description="The title of the search result")]
     url: Annotated[str, Field(description="The URL of the search result")]
     content: Annotated[str, Field(description="A snippet or description of the search result")]
     date: Annotated[str, Field(description="The date of the search result, if available")]
 
 
-class WebSearchResponse(BaseModel):
+class WebSearchResponse(VeniceBaseModel):
     query: Annotated[str, Field(description="The search query that was executed")]
     results: Annotated[list[Result], Field(description="The search results")]
