@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "veniceresch"
-version = "0.2.0"
+version = "0.3.0"
 description = "Typed, async-first Python client for the Venice.ai API."
 readme = "README.md"
 license = { file = "LICENSE" }

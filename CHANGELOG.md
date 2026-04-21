@@ -3,6 +3,73 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.0] — 2026-04-21
+
+### Added
+
+- `client.augment.*` — `scrape`, `search`, `parse`, `parse_text`. The
+  parser is split into two methods mirroring the
+  `image.generate` / `image.generate_binary` pattern: `parse()` returns
+  a typed `TextParserResponse` (`{text, tokens}`) from the JSON form,
+  `parse_text()` returns a plain `str` (multipart upload forced to
+  `response_format=text`, `Accept: text/plain`).
+- `client.characters.*` — `list`, `get(slug)`, `reviews(slug)`. Query
+  params accept snake_case and translate to the camelCase Venice
+  expects (`is_adult → isAdult`, `sort_by → sortBy`, `page_size →
+  pageSize`, etc.) — same convention as `model_id → modelId` for image
+  multi-edit. Boolean filters (`is_adult` / `is_pro` / `is_web_enabled`)
+  are serialized as the string enum Venice requires (`"true"` /
+  `"false"`).
+- `client.responses.stream(...)` and
+  `client.responses.create(..., stream=True)` — SSE streaming for the
+  Responses API. Same await-then-`async for` contract as
+  `client.chat.stream`. New public type
+  `veniceresch.types.ResponsesChunk` (tolerant — Venice's swagger
+  documents SSE support but doesn't define a per-chunk schema, so
+  unknown fields land on `.model_extra`).
+- `client.images.generate(...)` — drop-in alias for
+  `openai.images.generate`. Hits Venice's `/images/generations`
+  OpenAI-compatible endpoint. Coexists with the existing
+  `client.image.*` (singular) namespace, which stays the primary
+  Venice-native image surface. New public type
+  `veniceresch.types.OpenAIImageResponse`. The generated
+  `SimpleGenerateImageRequest` is re-exported from
+  `veniceresch.types` for callers that want the typed request form.
+- New public response types in `veniceresch.types`:
+  `TextParserResponse`, `CharacterListResponse`, `CharacterDetailResponse`,
+  `CharacterReviewsResponse`, `ResponsesChunk`, `OpenAIImageResponse`.
+  Plus re-exports of the generated request/response types
+  `WebScrapeRequest`, `WebScrapeResponse`, `WebSearchRequest`,
+  `WebSearchResponse`, `SimpleGenerateImageRequest`.
+- Endpoint coverage: 26 of 41 paths → 33 of 41 paths.
+- Tighter return types for video and audio queue/retrieve endpoints.
+  `client.video.queue/retrieve/quote/complete/transcribe` and
+  `client.audio.queue/retrieve/quote/complete/transcribe` now return
+  typed Pydantic models (`VideoQueueResponse`, `VideoRetrieveResponse`,
+  `AudioQueueResponse`, `AudioTranscriptionResponse`, etc.) instead of
+  `dict[str, Any]`. Attribute access on `.queue_id`, `.status`,
+  `.text`, `.transcript`, etc. `wait_for_completion` returns
+  `VideoRetrieveResponse` / `AudioRetrieveResponse`.
+- `chat.create` / `chat.stream` signature promotes the common
+  OpenAI-compatible fields to named kwargs for IDE autocomplete:
+  `temperature`, `top_p`, `n`, `stop`, `max_tokens`,
+  `frequency_penalty`, `presence_penalty`, `seed`, `tools`,
+  `tool_choice`, `response_format`, `logprobs`. All previously worked
+  via `**extra`; behavior is unchanged for existing callers. Less
+  common Venice-specific fields (`min_p`, `repetition_penalty`,
+  `reasoning_effort`, `prompt_cache_key`, etc.) still flow through
+  `**extra`.
+
+### Changed (breaking)
+
+- `client.video.queue`, `client.video.retrieve`, `client.video.quote`,
+  `client.video.complete`, `client.video.transcribe`,
+  `client.video.wait_for_completion`, and every `client.audio.*`
+  counterpart now return Pydantic models rather than `dict[str, Any]`.
+  Callers that did `result["queue_id"]` / `result.get("status")` must
+  switch to `result.queue_id` / `result.status`. Unknown fields still
+  land on `.model_extra` via ``extra="allow"``.
+
 ## [0.2.0] — 2026-04-20
 
 ### Added
