@@ -17,7 +17,16 @@ Venice's ``/responses`` endpoint lives on its own
 :class:`~veniceresch.resources.responses.AsyncResponsesResource` — call it
 via ``client.responses.create(...)``.
 
-``venice_parameters`` is passed through as-is. Validation is Venice's job.
+The most common OpenAI-compatible fields (``temperature``, ``top_p``,
+``n``, ``stop``, ``max_tokens``, ``frequency_penalty``,
+``presence_penalty``, ``seed``, ``tools``, ``tool_choice``,
+``response_format``, ``logprobs``) are named kwargs for IDE
+discoverability. Less common Venice- or OpenAI-specific extras
+(``reasoning``, ``reasoning_effort``, ``min_p``, ``min_temp``,
+``max_temp``, ``top_k``, ``repetition_penalty``, ``prompt_cache_key``,
+``top_logprobs``, ``parallel_tool_calls``, ``user``, …) are still
+accepted via ``**extra`` and forwarded verbatim. ``venice_parameters``
+is passed through as-is.
 """
 
 from __future__ import annotations
@@ -54,6 +63,46 @@ def _build_body(
     return body
 
 
+def _merge_promoted(
+    *,
+    temperature: float | None,
+    top_p: float | None,
+    n: int | None,
+    stop: str | Sequence[str] | None,
+    max_tokens: int | None,
+    frequency_penalty: float | None,
+    presence_penalty: float | None,
+    seed: int | None,
+    tools: Sequence[Mapping[str, Any]] | None,
+    tool_choice: str | Mapping[str, Any] | None,
+    response_format: Mapping[str, Any] | None,
+    logprobs: bool | None,
+    extra: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Merge promoted named kwargs with ``**extra`` for :func:`_build_body`.
+
+    None values are preserved and filtered by ``_build_body`` itself, so
+    callers who pass ``temperature=None`` get the same behavior as callers
+    who omit it.
+    """
+    merged: dict[str, Any] = {
+        "temperature": temperature,
+        "top_p": top_p,
+        "n": n,
+        "stop": stop,
+        "max_tokens": max_tokens,
+        "frequency_penalty": frequency_penalty,
+        "presence_penalty": presence_penalty,
+        "seed": seed,
+        "tools": list(tools) if tools is not None else None,
+        "tool_choice": tool_choice,
+        "response_format": response_format,
+        "logprobs": logprobs,
+    }
+    merged.update(extra)
+    return merged
+
+
 class AsyncChatResource:
     """Async chat resource. Accessed via ``client.chat``."""
 
@@ -69,6 +118,18 @@ class AsyncChatResource:
         messages: Sequence[Mapping[str, Any]],
         stream: Literal[False] = False,
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> ChatCompletionResponse: ...
 
@@ -80,6 +141,18 @@ class AsyncChatResource:
         messages: Sequence[Mapping[str, Any]],
         stream: Literal[True],
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> AsyncIterator[ChatCompletionChunk]: ...
 
@@ -90,6 +163,18 @@ class AsyncChatResource:
         messages: Sequence[Mapping[str, Any]],
         stream: bool = False,
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> ChatCompletionResponse | AsyncIterator[ChatCompletionChunk]:
         """Create a chat completion.
@@ -103,18 +188,33 @@ class AsyncChatResource:
             async for chunk in stream:
                 ...
         """
+        merged = _merge_promoted(
+            temperature=temperature,
+            top_p=top_p,
+            n=n,
+            stop=stop,
+            max_tokens=max_tokens,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            tools=tools,
+            tool_choice=tool_choice,
+            response_format=response_format,
+            logprobs=logprobs,
+            extra=extra,
+        )
         if stream:
-            return await self.stream(
+            return self._stream_iter(
                 model=model,
                 messages=messages,
                 venice_parameters=venice_parameters,
-                **extra,
+                extra=merged,
             )
         body = _build_body(
             model=model,
             messages=messages,
             venice_parameters=venice_parameters,
-            extra=extra,
+            extra=merged,
             stream=False,
         )
         raw = await self._client._request_json(
@@ -130,6 +230,18 @@ class AsyncChatResource:
         model: str,
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
         """Stream a chat completion as :class:`ChatCompletionChunk` events.
@@ -142,11 +254,26 @@ class AsyncChatResource:
                 ...
         """
         extra.pop("stream", None)
+        merged = _merge_promoted(
+            temperature=temperature,
+            top_p=top_p,
+            n=n,
+            stop=stop,
+            max_tokens=max_tokens,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            tools=tools,
+            tool_choice=tool_choice,
+            response_format=response_format,
+            logprobs=logprobs,
+            extra=extra,
+        )
         return self._stream_iter(
             model=model,
             messages=messages,
             venice_parameters=venice_parameters,
-            **extra,
+            extra=merged,
         )
 
     async def _stream_iter(
@@ -155,7 +282,7 @@ class AsyncChatResource:
         model: str,
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None,
-        **extra: Any,
+        extra: Mapping[str, Any],
     ) -> AsyncIterator[ChatCompletionChunk]:
         body = _build_body(
             model=model,
@@ -258,6 +385,18 @@ class ChatResource:
         messages: Sequence[Mapping[str, Any]],
         stream: Literal[False] = False,
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> ChatCompletionResponse: ...
 
@@ -269,6 +408,18 @@ class ChatResource:
         messages: Sequence[Mapping[str, Any]],
         stream: Literal[True],
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> Iterator[ChatCompletionChunk]: ...
 
@@ -279,20 +430,47 @@ class ChatResource:
         messages: Sequence[Mapping[str, Any]],
         stream: bool = False,
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> ChatCompletionResponse | Iterator[ChatCompletionChunk]:
+        merged = _merge_promoted(
+            temperature=temperature,
+            top_p=top_p,
+            n=n,
+            stop=stop,
+            max_tokens=max_tokens,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            tools=tools,
+            tool_choice=tool_choice,
+            response_format=response_format,
+            logprobs=logprobs,
+            extra=extra,
+        )
         if stream:
-            return self.stream(
+            return self._stream_iter(
                 model=model,
                 messages=messages,
                 venice_parameters=venice_parameters,
-                **extra,
+                extra=merged,
             )
         body = _build_body(
             model=model,
             messages=messages,
             venice_parameters=venice_parameters,
-            extra=extra,
+            extra=merged,
             stream=False,
         )
         raw = self._client._request_json(
@@ -308,9 +486,51 @@ class ChatResource:
         model: str,
         messages: Sequence[Mapping[str, Any]],
         venice_parameters: Mapping[str, Any] | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+        n: int | None = None,
+        stop: str | Sequence[str] | None = None,
+        max_tokens: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        seed: int | None = None,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_format: Mapping[str, Any] | None = None,
+        logprobs: bool | None = None,
         **extra: Any,
     ) -> Iterator[ChatCompletionChunk]:
         extra.pop("stream", None)
+        merged = _merge_promoted(
+            temperature=temperature,
+            top_p=top_p,
+            n=n,
+            stop=stop,
+            max_tokens=max_tokens,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+            seed=seed,
+            tools=tools,
+            tool_choice=tool_choice,
+            response_format=response_format,
+            logprobs=logprobs,
+            extra=extra,
+        )
+        return self._stream_iter(
+            model=model,
+            messages=messages,
+            venice_parameters=venice_parameters,
+            extra=merged,
+        )
+
+    def _stream_iter(
+        self,
+        *,
+        model: str,
+        messages: Sequence[Mapping[str, Any]],
+        venice_parameters: Mapping[str, Any] | None,
+        extra: Mapping[str, Any],
+    ) -> Iterator[ChatCompletionChunk]:
         body = _build_body(
             model=model,
             messages=messages,

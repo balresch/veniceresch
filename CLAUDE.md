@@ -20,7 +20,7 @@ Two distinct layers; they must stay distinct:
    - `types.py` — re-exports generated response models plus hand-authored ones for endpoints whose swagger response is inline (no named schema).
    - `resources/*.py` — one module per endpoint group. Each method maps swagger `requestBody.properties` to kwargs, calls the client helper, returns a typed Pydantic model or raw `bytes`. Resources don't construct httpx requests directly.
 
-`client.chat`, `client.image`, `client.video`, `client.audio`, `client.models`, `client.embeddings`, `client.billing` are wired in both client constructors. `client.chat.completions` is an OpenAI-namespace alias for `client.chat`.
+`client.chat`, `client.responses`, `client.image`, `client.images` (OpenAI alias), `client.video`, `client.audio`, `client.models`, `client.embeddings`, `client.billing`, `client.augment`, `client.characters` are wired in both client constructors. `client.chat.completions` is an OpenAI-namespace alias for `client.chat`.
 
 ## Non-goals
 
@@ -32,7 +32,7 @@ Two distinct layers; they must stay distinct:
 
 - **`venice_parameters`** — Venice extends chat completions with an extras object. First-class kwarg in `chat.create` / `chat.stream`.
 - **Binary responses** — image edit/multi-edit/upscale/background-remove return raw PNG bytes. Resource methods return `bytes`. For image-generate, `generate()` returns a `GenerateImageResponse` (JSON) and `generate_binary()` returns bytes (forces `return_binary=True`).
-- **Video polling** — `/video/queue` gives a `queue_id`; caller polls `/video/retrieve` until `status != "PROCESSING"`. The `wait_for_completion(queue_id, model, timeout_s, poll_interval_s)` helper is the only resource method with real logic beyond "post and parse." Raises `VeniceVideoTimeoutError` on deadline. Audio has the same pattern.
+- **Video polling** — `/video/queue` gives a `queue_id`; caller polls `/video/retrieve` until `status != "PROCESSING"`. The `wait_for_completion(queue_id, model, timeout_s, poll_interval_s)` helper is the only resource method with real logic beyond "post and parse." Raises `VeniceVideoTimeoutError` on deadline. Audio has the same pattern. Queue/retrieve/quote/complete/transcribe methods return hand-authored Pydantic wrappers (`VideoQueueResponse`, `AudioRetrieveResponse`, …), not `dict`.
 - **`model_id` vs `model`** — `/image/multi-edit` uses `modelId` (camelCase) in the spec; the Python API accepts `model_id` and translates. Everywhere else it's `model`.
 - **Binary Accept header** — `_request_bytes` sets `Accept: application/octet-stream` by default, but caller-provided `headers={"Accept": ...}` wins. Needed for `video/mp4`, `audio/mpeg`, etc.
 - **Streaming await contract** — `await client.chat.stream(...)` or `await client.chat.create(..., stream=True)` returns an async iterator; then `async for` it. Both async forms require the `await` (same shape as the OpenAI Python SDK). Sync streaming returns an iterator directly.
@@ -55,9 +55,9 @@ Generated response types used directly by resources (`BillingBalanceResponse`, `
 
 ## Endpoint coverage
 
-Covered (26 of 41 paths): chat (2), image (6), video (5), audio (6), models (3), embeddings (1), billing (3). See `CHANGELOG.md` and the coverage table in `README.md` for the full list.
+Covered (33 of 41 paths): chat (1), responses (1), image (6), images (1, OpenAI alias for `/images/generations`), video (5), audio (6), models (3), embeddings (1), billing (3), augment (3), characters (3). `/chat/completions` and `/responses` both support SSE streaming. See `CHANGELOG.md` and the coverage table in `README.md` for the full list.
 
-Deferred or out of scope: `/augment/*` (3), `/characters/*` (3), `/images/generations` (OpenAI alias), `/api_keys/*` (5), `/x402/*` (3).
+Deferred or out of scope: `/api_keys/*` (5), `/x402/*` (3). 33 + 8 = 41.
 
 ## Python / packaging
 

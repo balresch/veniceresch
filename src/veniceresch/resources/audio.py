@@ -13,6 +13,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from veniceresch._errors import VeniceAPIError
+from veniceresch.types import (
+    AudioCompleteResponse,
+    AudioQueueResponse,
+    AudioQuoteResponse,
+    AudioRetrieveResponse,
+    AudioTranscriptionResponse,
+)
 
 if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
@@ -86,7 +93,7 @@ class AsyncAudioResource:
         model: str | None = None,
         response_format: str | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> AudioTranscriptionResponse:
         """Transcribe an audio file (multipart upload)."""
         files = {"file": _audio_file_tuple(file)}
         form = _drop_none(
@@ -96,12 +103,13 @@ class AsyncAudioResource:
                 **{k: str(v) for k, v in extra.items() if v is not None},
             }
         )
-        return await self._client._request_json(
+        raw = await self._client._request_json(
             "POST",
             "/audio/transcriptions",
             files=files,
             data=form,
         )
+        return AudioTranscriptionResponse.model_validate(raw)
 
     async def queue(
         self,
@@ -109,13 +117,15 @@ class AsyncAudioResource:
         model: str,
         prompt: str,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> AudioQueueResponse:
         body = _drop_none({"model": model, "prompt": prompt, **extra})
-        return await self._client._request_json("POST", "/audio/queue", json_body=body)
+        raw = await self._client._request_json("POST", "/audio/queue", json_body=body)
+        return AudioQueueResponse.model_validate(raw)
 
-    async def retrieve(self, *, model: str, queue_id: str, **extra: Any) -> dict[str, Any]:
+    async def retrieve(self, *, model: str, queue_id: str, **extra: Any) -> AudioRetrieveResponse:
         body = _drop_none({"model": model, "queue_id": queue_id, **extra})
-        return await self._client._request_json("POST", "/audio/retrieve", json_body=body)
+        raw = await self._client._request_json("POST", "/audio/retrieve", json_body=body)
+        return AudioRetrieveResponse.model_validate(raw)
 
     async def retrieve_binary(
         self,
@@ -133,13 +143,15 @@ class AsyncAudioResource:
             headers={"Accept": accept},
         )
 
-    async def quote(self, *, model: str, **extra: Any) -> dict[str, Any]:
+    async def quote(self, *, model: str, **extra: Any) -> AudioQuoteResponse:
         body = _drop_none({"model": model, **extra})
-        return await self._client._request_json("POST", "/audio/quote", json_body=body)
+        raw = await self._client._request_json("POST", "/audio/quote", json_body=body)
+        return AudioQuoteResponse.model_validate(raw)
 
-    async def complete(self, *, model: str, queue_id: str) -> dict[str, Any]:
+    async def complete(self, *, model: str, queue_id: str) -> AudioCompleteResponse:
         body = {"model": model, "queue_id": queue_id}
-        return await self._client._request_json("POST", "/audio/complete", json_body=body)
+        raw = await self._client._request_json("POST", "/audio/complete", json_body=body)
+        return AudioCompleteResponse.model_validate(raw)
 
     async def wait_for_completion(
         self,
@@ -148,11 +160,11 @@ class AsyncAudioResource:
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,
-    ) -> dict[str, Any]:
+    ) -> AudioRetrieveResponse:
         deadline = time.monotonic() + timeout_s
         while True:
             result = await self.retrieve(model=model, queue_id=queue_id)
-            if result.get("status") != _STATUS_PROCESSING:
+            if result.status != _STATUS_PROCESSING:
                 return result
             if time.monotonic() >= deadline:
                 raise VeniceAudioTimeoutError(queue_id, timeout_s)
@@ -192,7 +204,7 @@ class AudioResource:
         model: str | None = None,
         response_format: str | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> AudioTranscriptionResponse:
         files = {"file": _audio_file_tuple(file)}
         form = _drop_none(
             {
@@ -201,20 +213,23 @@ class AudioResource:
                 **{k: str(v) for k, v in extra.items() if v is not None},
             }
         )
-        return self._client._request_json(
+        raw = self._client._request_json(
             "POST",
             "/audio/transcriptions",
             files=files,
             data=form,
         )
+        return AudioTranscriptionResponse.model_validate(raw)
 
-    def queue(self, *, model: str, prompt: str, **extra: Any) -> dict[str, Any]:
+    def queue(self, *, model: str, prompt: str, **extra: Any) -> AudioQueueResponse:
         body = _drop_none({"model": model, "prompt": prompt, **extra})
-        return self._client._request_json("POST", "/audio/queue", json_body=body)
+        raw = self._client._request_json("POST", "/audio/queue", json_body=body)
+        return AudioQueueResponse.model_validate(raw)
 
-    def retrieve(self, *, model: str, queue_id: str, **extra: Any) -> dict[str, Any]:
+    def retrieve(self, *, model: str, queue_id: str, **extra: Any) -> AudioRetrieveResponse:
         body = _drop_none({"model": model, "queue_id": queue_id, **extra})
-        return self._client._request_json("POST", "/audio/retrieve", json_body=body)
+        raw = self._client._request_json("POST", "/audio/retrieve", json_body=body)
+        return AudioRetrieveResponse.model_validate(raw)
 
     def retrieve_binary(
         self,
@@ -232,13 +247,15 @@ class AudioResource:
             headers={"Accept": accept},
         )
 
-    def quote(self, *, model: str, **extra: Any) -> dict[str, Any]:
+    def quote(self, *, model: str, **extra: Any) -> AudioQuoteResponse:
         body = _drop_none({"model": model, **extra})
-        return self._client._request_json("POST", "/audio/quote", json_body=body)
+        raw = self._client._request_json("POST", "/audio/quote", json_body=body)
+        return AudioQuoteResponse.model_validate(raw)
 
-    def complete(self, *, model: str, queue_id: str) -> dict[str, Any]:
+    def complete(self, *, model: str, queue_id: str) -> AudioCompleteResponse:
         body = {"model": model, "queue_id": queue_id}
-        return self._client._request_json("POST", "/audio/complete", json_body=body)
+        raw = self._client._request_json("POST", "/audio/complete", json_body=body)
+        return AudioCompleteResponse.model_validate(raw)
 
     def wait_for_completion(
         self,
@@ -247,11 +264,11 @@ class AudioResource:
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,
-    ) -> dict[str, Any]:
+    ) -> AudioRetrieveResponse:
         deadline = time.monotonic() + timeout_s
         while True:
             result = self.retrieve(model=model, queue_id=queue_id)
-            if result.get("status") != _STATUS_PROCESSING:
+            if result.status != _STATUS_PROCESSING:
                 return result
             if time.monotonic() >= deadline:
                 raise VeniceAudioTimeoutError(queue_id, timeout_s)

@@ -18,13 +18,19 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from veniceresch._errors import VeniceAPIError
+from veniceresch.types import (
+    VideoCompleteResponse,
+    VideoQueueResponse,
+    VideoQuoteResponse,
+    VideoRetrieveResponse,
+    VideoTranscriptionResponse,
+)
 
 if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
 _STATUS_PROCESSING = "PROCESSING"
-_STATUS_COMPLETED = "COMPLETED"
 _DEFAULT_TIMEOUT_S = 600.0
 _DEFAULT_POLL_S = 2.0
 
@@ -59,9 +65,10 @@ class AsyncVideoResource:
         prompt: str,
         duration: str | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> VideoQueueResponse:
         body = _drop_none({"model": model, "prompt": prompt, "duration": duration, **extra})
-        return await self._client._request_json("POST", "/video/queue", json_body=body)
+        raw = await self._client._request_json("POST", "/video/queue", json_body=body)
+        return VideoQueueResponse.model_validate(raw)
 
     async def retrieve(
         self,
@@ -69,8 +76,8 @@ class AsyncVideoResource:
         model: str,
         queue_id: str,
         delete_media_on_completion: bool | None = None,
-    ) -> dict[str, Any]:
-        """Poll the queue. Returns a dict with a ``status`` field."""
+    ) -> VideoRetrieveResponse:
+        """Poll the queue. Returns a model with a ``status`` field."""
         body = _drop_none(
             {
                 "model": model,
@@ -78,7 +85,8 @@ class AsyncVideoResource:
                 "delete_media_on_completion": delete_media_on_completion,
             }
         )
-        return await self._client._request_json("POST", "/video/retrieve", json_body=body)
+        raw = await self._client._request_json("POST", "/video/retrieve", json_body=body)
+        return VideoRetrieveResponse.model_validate(raw)
 
     async def retrieve_binary(
         self,
@@ -108,31 +116,34 @@ class AsyncVideoResource:
         model: str,
         duration: str | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> VideoQuoteResponse:
         body = _drop_none({"model": model, "duration": duration, **extra})
-        return await self._client._request_json("POST", "/video/quote", json_body=body)
+        raw = await self._client._request_json("POST", "/video/quote", json_body=body)
+        return VideoQuoteResponse.model_validate(raw)
 
     async def complete(
         self,
         *,
         model: str,
         queue_id: str,
-    ) -> dict[str, Any]:
+    ) -> VideoCompleteResponse:
         body = {"model": model, "queue_id": queue_id}
-        return await self._client._request_json("POST", "/video/complete", json_body=body)
+        raw = await self._client._request_json("POST", "/video/complete", json_body=body)
+        return VideoCompleteResponse.model_validate(raw)
 
     async def transcribe(
         self,
         *,
         url: str,
         response_format: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> VideoTranscriptionResponse:
         body = _drop_none({"url": url, "response_format": response_format})
-        return await self._client._request_json(
+        raw = await self._client._request_json(
             "POST",
             "/video/transcriptions",
             json_body=body,
         )
+        return VideoTranscriptionResponse.model_validate(raw)
 
     async def wait_for_completion(
         self,
@@ -141,7 +152,7 @@ class AsyncVideoResource:
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,
-    ) -> dict[str, Any]:
+    ) -> VideoRetrieveResponse:
         """Poll ``/video/retrieve`` until the job is done.
 
         Returns the final retrieve response (status ``COMPLETED`` or any
@@ -151,7 +162,7 @@ class AsyncVideoResource:
         deadline = time.monotonic() + timeout_s
         while True:
             result = await self.retrieve(model=model, queue_id=queue_id)
-            if result.get("status") != _STATUS_PROCESSING:
+            if result.status != _STATUS_PROCESSING:
                 return result
             if time.monotonic() >= deadline:
                 raise VeniceVideoTimeoutError(queue_id, timeout_s)
@@ -171,9 +182,10 @@ class VideoResource:
         prompt: str,
         duration: str | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> VideoQueueResponse:
         body = _drop_none({"model": model, "prompt": prompt, "duration": duration, **extra})
-        return self._client._request_json("POST", "/video/queue", json_body=body)
+        raw = self._client._request_json("POST", "/video/queue", json_body=body)
+        return VideoQueueResponse.model_validate(raw)
 
     def retrieve(
         self,
@@ -181,7 +193,7 @@ class VideoResource:
         model: str,
         queue_id: str,
         delete_media_on_completion: bool | None = None,
-    ) -> dict[str, Any]:
+    ) -> VideoRetrieveResponse:
         body = _drop_none(
             {
                 "model": model,
@@ -189,7 +201,8 @@ class VideoResource:
                 "delete_media_on_completion": delete_media_on_completion,
             }
         )
-        return self._client._request_json("POST", "/video/retrieve", json_body=body)
+        raw = self._client._request_json("POST", "/video/retrieve", json_body=body)
+        return VideoRetrieveResponse.model_validate(raw)
 
     def retrieve_binary(
         self,
@@ -218,17 +231,22 @@ class VideoResource:
         model: str,
         duration: str | None = None,
         **extra: Any,
-    ) -> dict[str, Any]:
+    ) -> VideoQuoteResponse:
         body = _drop_none({"model": model, "duration": duration, **extra})
-        return self._client._request_json("POST", "/video/quote", json_body=body)
+        raw = self._client._request_json("POST", "/video/quote", json_body=body)
+        return VideoQuoteResponse.model_validate(raw)
 
-    def complete(self, *, model: str, queue_id: str) -> dict[str, Any]:
+    def complete(self, *, model: str, queue_id: str) -> VideoCompleteResponse:
         body = {"model": model, "queue_id": queue_id}
-        return self._client._request_json("POST", "/video/complete", json_body=body)
+        raw = self._client._request_json("POST", "/video/complete", json_body=body)
+        return VideoCompleteResponse.model_validate(raw)
 
-    def transcribe(self, *, url: str, response_format: str | None = None) -> dict[str, Any]:
+    def transcribe(
+        self, *, url: str, response_format: str | None = None
+    ) -> VideoTranscriptionResponse:
         body = _drop_none({"url": url, "response_format": response_format})
-        return self._client._request_json("POST", "/video/transcriptions", json_body=body)
+        raw = self._client._request_json("POST", "/video/transcriptions", json_body=body)
+        return VideoTranscriptionResponse.model_validate(raw)
 
     def wait_for_completion(
         self,
@@ -237,11 +255,11 @@ class VideoResource:
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,
-    ) -> dict[str, Any]:
+    ) -> VideoRetrieveResponse:
         deadline = time.monotonic() + timeout_s
         while True:
             result = self.retrieve(model=model, queue_id=queue_id)
-            if result.get("status") != _STATUS_PROCESSING:
+            if result.status != _STATUS_PROCESSING:
                 return result
             if time.monotonic() >= deadline:
                 raise VeniceVideoTimeoutError(queue_id, timeout_s)

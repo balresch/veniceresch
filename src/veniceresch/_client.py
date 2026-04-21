@@ -25,10 +25,13 @@ from veniceresch._errors import (
 )
 from veniceresch._version import __version__
 from veniceresch.resources.audio import AsyncAudioResource, AudioResource
+from veniceresch.resources.augment import AsyncAugmentResource, AugmentResource
 from veniceresch.resources.billing import AsyncBillingResource, BillingResource
+from veniceresch.resources.characters import AsyncCharactersResource, CharactersResource
 from veniceresch.resources.chat import AsyncChatResource, ChatResource
 from veniceresch.resources.embeddings import AsyncEmbeddingsResource, EmbeddingsResource
 from veniceresch.resources.image import AsyncImageResource, ImageResource
+from veniceresch.resources.images import AsyncImagesResource, ImagesResource
 from veniceresch.resources.models import AsyncModelsResource, ModelsResource
 from veniceresch.resources.responses import AsyncResponsesResource, ResponsesResource
 from veniceresch.resources.video import AsyncVideoResource, VideoResource
@@ -126,6 +129,9 @@ class AsyncVeniceClient(_BaseClient):
         self.models = AsyncModelsResource(self)
         self.embeddings = AsyncEmbeddingsResource(self)
         self.billing = AsyncBillingResource(self)
+        self.augment = AsyncAugmentResource(self)
+        self.characters = AsyncCharactersResource(self)
+        self.images = AsyncImagesResource(self)
 
     async def __aenter__(self) -> Self:
         return self
@@ -319,6 +325,9 @@ class VeniceClient(_BaseClient):
         self.models = ModelsResource(self)
         self.embeddings = EmbeddingsResource(self)
         self.billing = BillingResource(self)
+        self.augment = AugmentResource(self)
+        self.characters = CharactersResource(self)
+        self.images = ImagesResource(self)
 
     def __enter__(self) -> Self:
         return self

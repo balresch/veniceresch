@@ -40,7 +40,7 @@ async def test_transcribe_multipart_upload(mock_api, async_client, tmp_path):
         model="whisper-1",
         response_format="json",
     )
-    assert result == {"text": "transcript"}
+    assert result.text == "transcript"
     # Request should be multipart form, not JSON.
     content_type = route.calls.last.request.headers["content-type"]
     assert content_type.startswith("multipart/form-data")
@@ -50,13 +50,16 @@ async def test_transcribe_multipart_upload(mock_api, async_client, tmp_path):
 
 
 async def test_audio_queue(mock_api, async_client):
-    route = mock_api.post("/audio/queue").respond(200, json={"queue_id": "a-1"})
+    route = mock_api.post("/audio/queue").respond(
+        200, json={"model": "a", "queue_id": "a-1", "status": "QUEUED"}
+    )
     result = await async_client.audio.queue(
         model="a",
         prompt="a song",
         duration="30s",
     )
-    assert result["queue_id"] == "a-1"
+    assert result.queue_id == "a-1"
+    assert result.status == "QUEUED"
     body = json.loads(route.calls.last.request.content)
     assert body == {"model": "a", "prompt": "a song", "duration": "30s"}
 
@@ -87,7 +90,7 @@ async def test_audio_wait_returns_on_completed(mock_api, async_client):
         timeout_s=5.0,
         poll_interval_s=0.01,
     )
-    assert result["status"] == "COMPLETED"
+    assert result.status == "COMPLETED"
 
 
 async def test_audio_wait_raises_on_timeout(mock_api, async_client):
@@ -105,9 +108,11 @@ async def test_audio_wait_raises_on_timeout(mock_api, async_client):
 
 
 async def test_audio_quote(mock_api, async_client):
-    mock_api.post("/audio/quote").respond(200, json={"price": 0.1})
+    # Swagger calls this "quote"; any extra fields Venice adds land on model_extra.
+    mock_api.post("/audio/quote").respond(200, json={"quote": 0.1, "price": 0.1})
     result = await async_client.audio.quote(model="a", duration="30s")
-    assert result == {"price": 0.1}
+    assert result.quote == 0.1
+    assert result.model_extra == {"price": 0.1}
 
 
 async def test_audio_complete(mock_api, async_client):
