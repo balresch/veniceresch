@@ -3,6 +3,65 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.0] — 2026-04-21
+
+### Added
+
+- `client.api_keys.*` — `list`, `get(id)`, `create`, `update`, `delete`,
+  `rate_limits`, `rate_limits_log`, `generate_web3_key_challenge`,
+  `generate_web3_key`. Bearer-auth endpoints require an **admin**-scope
+  key; the two `generate_web3_key` methods skip auth (Venice's swagger
+  marks them `security: []`). Body / query keys follow the existing
+  snake_case → camelCase convention (`api_key_type → apiKeyType`,
+  `consumption_limit → consumptionLimit`, `expires_at → expiresAt`).
+- `client.x402.*` — `balance(wallet_address, siwx_header=…)`,
+  `top_up(payment_header=…)`, `transactions(wallet_address, siwx_header=…,
+  limit, offset)`. Wallet-signed payloads (SIWE / x402) are passed in as
+  plain strings and forwarded verbatim; this SDK doesn't bundle a wallet
+  signer.
+- `VeniceX402PaymentRequiredError` — new exception surfaced when a 402
+  response carries the x402 discovery payload (`x402Version` + `accepts`).
+  Calling `client.x402.top_up()` without a payment header raises this so
+  callers can read `.accepts` to pick a payment option and retry with
+  `top_up(payment_header=…)`. Non-x402 402 responses still raise
+  `VeniceInsufficientBalanceError`.
+- New public response types in `veniceresch.types`:
+  `ApiKeyListResponse`, `ApiKeyDetailResponse`, `ApiKeyCreateResponse`,
+  `ApiKeyUpdateResponse`, `ApiKeyDeleteResponse`,
+  `ApiKeyRateLimitsResponse`, `ApiKeyRateLimitLogsResponse`,
+  `Web3KeyChallengeResponse`, `Web3KeyCreateResponse`,
+  `X402BalanceResponse`, `X402TopUpResponse`, `X402TransactionsResponse`.
+- Endpoint coverage: 33 of 41 paths → **41 of 41**. Full parity with the
+  current Venice OpenAPI spec.
+- Internal `no_auth=True` kwarg on the client's `_request_json` / `_send`
+  helpers — strips the default `Authorization: Bearer …` header when a
+  route uses another auth scheme.
+- Auto-paginating `iter_*` helpers for the four Venice list endpoints
+  that previously required driving `limit`/`offset` or `page`/`pageSize`
+  loops by hand: `client.x402.iter_transactions`,
+  `client.characters.iter_list`, `client.characters.iter_reviews`, and
+  `client.billing.iter_usage`. Each returns an
+  `AsyncPaginator[dict, ResponseT]` (sync: `Paginator[...]`); iterating
+  it yields one record at a time across page boundaries, and
+  `.iter_pages()` yields the raw response per page. Iteration is lazy —
+  no HTTP call fires before `async for` / `for` starts. End-of-data is
+  detected per endpoint: `hasMore=False` for x402, `page >= totalPages`
+  for billing.usage and characters.reviews, and "short page" for
+  characters.list (which has no pagination envelope).
+  `api_keys.rate_limits_log` has no `iter_*` counterpart — Venice's
+  swagger fixes it at the last 50 entries with no pagination params.
+  The existing single-page methods (`transactions`, `list`, `reviews`,
+  `usage`) are unchanged; `iter_*` is strictly additive.
+- `veniceresch.pagination.AsyncPaginator` and
+  `veniceresch.pagination.Paginator` — new generic classes, also
+  re-exported from top-level as `from veniceresch import
+  AsyncPaginator, Paginator` for use in caller type hints.
+- `ModelList.parsed_data()` — convenience method returning
+  ``.data`` elements as typed :class:`ModelResponse` objects via
+  ``model_construct`` (drift-tolerant; unknown fields land on
+  ``.model_extra``). The raw ``.data`` field is unchanged; this is
+  purely additive opt-in for typed attribute access.
+
 ## [0.3.0] — 2026-04-21
 
 ### Added

@@ -222,6 +222,105 @@ Query parameters use Python snake_case (`is_adult`, `is_pro`,
 `is_web_enabled`, `sort_by`, `sort_order`, `model_id`, `page_size`); the
 client translates them to the camelCase Venice expects.
 
+## API key management
+
+`client.api_keys.*` wraps Venice's `/api_keys/*` routes — these normally
+require an **admin**-scope key (inference keys don't grant access to key
+management, so expect `VeniceAuthError` on the wrong key type).
+
+```python
+keys = await client.api_keys.list()
+detail = await client.api_keys.get("k1")
+created = await client.api_keys.create(
+    api_key_type="INFERENCE",
+    description="my bot",
+    consumption_limit={"usd": 50, "diem": 10},
+)
+print(created.data["apiKey"])  # only returned once — save it now
+
+await client.api_keys.update(id="k1", description="renamed")
+await client.api_keys.delete("k1")
+
+limits = await client.api_keys.rate_limits()
+exceedances = await client.api_keys.rate_limits_log()
+```
+
+The `/api_keys/generate_web3_key` endpoints mint a key from a wallet
+signature instead of an admin token; they skip the default `Authorization`
+header automatically. Bring your own signer:
+
+```python
+challenge = await client.api_keys.generate_web3_key_challenge()
+signature = my_wallet.sign(challenge.data["token"])  # your signing code
+
+minted = await client.api_keys.generate_web3_key(
+    api_key_type="INFERENCE",
+    address="0x...",
+    signature=signature,
+    token=challenge.data["token"],
+)
+print(minted.data["apiKey"])
+```
+
+## x402 (wallet-paid credit)
+
+`client.x402.*` wraps Venice's `/x402/*` routes. These use wallet-based
+auth — not the bearer token — so this SDK accepts the signed header
+payloads as strings and sends them verbatim. We don't bundle a wallet
+signer; generate the SIWE / `X-402-Payment` payloads with whatever
+tooling you already use.
+
+```python
+balance = await client.x402.balance("0xabc...", siwx_header=siwe_payload)
+print(balance.data["balanceUsd"], balance.data["canConsume"])
+
+history = await client.x402.transactions(
+    "0xabc...", siwx_header=siwe_payload, limit=25,
+)
+```
+
+`top_up` returns the credited-balance payload on success. Calling it with
+no header triggers Venice's 402 discovery flow, which raises
+`VeniceX402PaymentRequiredError` carrying the accepted payment options on
+`.accepts`:
+
+```python
+from veniceresch import VeniceX402PaymentRequiredError
+
+try:
+    await client.x402.top_up()  # no header → discovery
+except VeniceX402PaymentRequiredError as exc:
+    for option in exc.accepts:
+        print(option["network"], option["asset"], option["amount"], option["payTo"])
+    signed = my_wallet.sign_x402_payment(exc.accepts[0])
+    credited = await client.x402.top_up(payment_header=signed)
+    print(credited.data["newBalance"])
+```
+
+## Auto-pagination
+
+Four list endpoints ship companion `iter_*` methods that walk every
+page for you. They return an `AsyncPaginator` (or `Paginator` on the
+sync client) — iterate it to get one item at a time, or call
+`.iter_pages()` to get whole response objects:
+
+```python
+async for tx in client.x402.iter_transactions("0xabc...", siwx_header=siwe_payload):
+    print(tx["id"], tx["amount"])
+
+# Or page-by-page:
+async for page in client.x402.iter_transactions(
+    "0xabc...", siwx_header=siwe_payload
+).iter_pages():
+    print(f"{len(page.data['transactions'])} transactions on this page")
+```
+
+The same pattern works for `client.characters.iter_list(...)`,
+`client.characters.iter_reviews(slug)`, and
+`client.billing.iter_usage(...)`. No HTTP request fires until iteration
+starts. The single-page methods (`transactions`, `list`, `reviews`,
+`usage`) still work unchanged.
+
 ## Error handling
 
 Every failure raises a subclass of `VeniceError`. HTTP responses map to
@@ -232,6 +331,7 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 |---|---|
 | `VeniceAuthError` | 401 — bad or missing API key |
 | `VeniceInsufficientBalanceError` | 402 — balance exhausted |
+| `VeniceX402PaymentRequiredError` | 402 from an x402 endpoint — body is an x402 discovery payload (`x402_version`, `accepts`), not an error |
 | `VeniceValidationError` | 400 / 422 — bad request shape |
 | `VeniceNotFoundError` | 404 |
 | `VeniceRateLimitError` | 429 |
@@ -310,10 +410,13 @@ VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 | billing | `/billing/balance`, `/billing/usage`, `/billing/usage-analytics` | — |
 | augment | `/augment/scrape`, `/augment/search`, `/augment/text-parser` | — |
 | characters | `/characters`, `/characters/{slug}`, `/characters/{slug}/reviews` | — |
-| api_keys / x402 | — | out of scope |
+| api_keys | `/api_keys` (list/create/update/delete), `/api_keys/{id}`, `/api_keys/rate_limits`, `/api_keys/rate_limits/log`, `/api_keys/generate_web3_key` (GET + POST) | — |
+| x402 | `/x402/balance/{walletAddress}`, `/x402/top-up`, `/x402/transactions/{walletAddress}` | — |
 
-Anything not in the table above can still be called directly via the
-client's low-level request helpers.
+All 41 paths in Venice's current OpenAPI spec are covered. The x402 and
+web3 endpoints use wallet-based auth — this SDK accepts the signed header
+payloads you produce (SIWE / `X-402-Payment`) and forwards them verbatim;
+it does not bundle a wallet signer.
 
 Non-goals (unchanged from v0.1): retry/backoff, CLI, SSE parsing beyond
 decoded JSON events, tool-use schema builders.

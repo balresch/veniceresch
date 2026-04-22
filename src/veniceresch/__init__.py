@@ -13,13 +13,17 @@ from veniceresch._errors import (
     VeniceServerError,
     VeniceTimeoutError,
     VeniceValidationError,
+    VeniceX402PaymentRequiredError,
 )
 from veniceresch._version import __version__
+from veniceresch.pagination import AsyncPaginator, Paginator
 from veniceresch.resources.audio import VeniceAudioTimeoutError
 from veniceresch.resources.video import VeniceVideoTimeoutError
 
 __all__ = [
+    "AsyncPaginator",
     "AsyncVeniceClient",
+    "Paginator",
     "VeniceAPIError",
     "VeniceAudioTimeoutError",
     "VeniceAuthError",
@@ -34,5 +38,6 @@ __all__ = [
     "VeniceTimeoutError",
     "VeniceValidationError",
     "VeniceVideoTimeoutError",
+    "VeniceX402PaymentRequiredError",
     "__version__",
 ]

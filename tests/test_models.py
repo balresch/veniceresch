@@ -43,3 +43,26 @@ def test_sync_models_list(mock_api, sync_client):
     result = sync_client.models.list()
     # .data entries stay as dicts — see ModelList docstring for why.
     assert result.data[0]["id"] == "m"
+
+
+async def test_parsed_data_returns_typed_models(mock_api, async_client):
+    mock_api.get("/models").respond(
+        200,
+        json={
+            "object": "list",
+            "data": [
+                {"id": "llama-3.3-70b", "type": "text", "brand_new_field": "ok"},
+                {"id": "venice-image", "type": "image"},
+            ],
+        },
+    )
+    result = await async_client.models.list()
+    parsed = result.parsed_data()
+    assert len(parsed) == 2
+    # Attribute access on known fields.
+    assert parsed[0].id == "llama-3.3-70b"
+    assert parsed[0].type == "text"
+    # Unknown fields preserved via extra="allow" (drift-tolerant).
+    assert parsed[0].model_extra == {"brand_new_field": "ok"}
+    # The raw .data is untouched.
+    assert result.data[0]["id"] == "llama-3.3-70b"

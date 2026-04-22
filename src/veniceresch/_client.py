@@ -24,6 +24,7 @@ from veniceresch._errors import (
     translate_httpx_error,
 )
 from veniceresch._version import __version__
+from veniceresch.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from veniceresch.resources.audio import AsyncAudioResource, AudioResource
 from veniceresch.resources.augment import AsyncAugmentResource, AugmentResource
 from veniceresch.resources.billing import AsyncBillingResource, BillingResource
@@ -35,6 +36,7 @@ from veniceresch.resources.images import AsyncImagesResource, ImagesResource
 from veniceresch.resources.models import AsyncModelsResource, ModelsResource
 from veniceresch.resources.responses import AsyncResponsesResource, ResponsesResource
 from veniceresch.resources.video import AsyncVideoResource, VideoResource
+from veniceresch.resources.x402 import AsyncX402Resource, X402Resource
 
 DEFAULT_BASE_URL = "https://api.venice.ai/api/v1"
 DEFAULT_TIMEOUT = 60.0
@@ -132,6 +134,8 @@ class AsyncVeniceClient(_BaseClient):
         self.augment = AsyncAugmentResource(self)
         self.characters = AsyncCharactersResource(self)
         self.images = AsyncImagesResource(self)
+        self.api_keys = AsyncApiKeysResource(self)
+        self.x402 = AsyncX402Resource(self)
 
     async def __aenter__(self) -> Self:
         return self
@@ -153,6 +157,7 @@ class AsyncVeniceClient(_BaseClient):
         headers: Mapping[str, str] | None = None,
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
+        no_auth: bool = False,
     ) -> dict[str, Any]:
         response = await self._send(
             method,
@@ -162,6 +167,7 @@ class AsyncVeniceClient(_BaseClient):
             headers=headers,
             files=files,
             data=data,
+            no_auth=no_auth,
         )
         parsed = response.json()
         if not isinstance(parsed, dict):
@@ -257,6 +263,7 @@ class AsyncVeniceClient(_BaseClient):
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
         accept: str | None = None,
+        no_auth: bool = False,
     ) -> httpx.Response:
         url = self._url_for(path)
         merged_headers = self._merge_headers(headers)
@@ -264,6 +271,10 @@ class AsyncVeniceClient(_BaseClient):
         # (e.g. video.retrieve_binary passes "video/mp4" explicitly).
         if accept is not None and not _has_header(headers, "accept"):
             merged_headers["Accept"] = accept
+        # Strip the default bearer for endpoints that use other auth
+        # (x402 SIWE, /api_keys/generate_web3_key, anonymous discovery).
+        if no_auth and not _has_header(headers, "authorization"):
+            merged_headers.pop("Authorization", None)
         try:
             response = await self._http.request(
                 method,
@@ -328,6 +339,8 @@ class VeniceClient(_BaseClient):
         self.augment = AugmentResource(self)
         self.characters = CharactersResource(self)
         self.images = ImagesResource(self)
+        self.api_keys = ApiKeysResource(self)
+        self.x402 = X402Resource(self)
 
     def __enter__(self) -> Self:
         return self
@@ -349,6 +362,7 @@ class VeniceClient(_BaseClient):
         headers: Mapping[str, str] | None = None,
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
+        no_auth: bool = False,
     ) -> dict[str, Any]:
         response = self._send(
             method,
@@ -358,6 +372,7 @@ class VeniceClient(_BaseClient):
             headers=headers,
             files=files,
             data=data,
+            no_auth=no_auth,
         )
         parsed = response.json()
         if not isinstance(parsed, dict):
@@ -448,11 +463,14 @@ class VeniceClient(_BaseClient):
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
         accept: str | None = None,
+        no_auth: bool = False,
     ) -> httpx.Response:
         url = self._url_for(path)
         merged_headers = self._merge_headers(headers)
         if accept is not None and not _has_header(headers, "accept"):
             merged_headers["Accept"] = accept
+        if no_auth and not _has_header(headers, "authorization"):
+            merged_headers.pop("Authorization", None)
         try:
             response = self._http.request(
                 method,

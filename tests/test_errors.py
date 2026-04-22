@@ -13,6 +13,7 @@ from veniceresch import (
     VeniceRateLimitError,
     VeniceServerError,
     VeniceValidationError,
+    VeniceX402PaymentRequiredError,
 )
 from veniceresch._errors import raise_for_response
 
@@ -68,6 +69,38 @@ def test_content_violation_precedence_over_status(make_response):
         raise_for_response(response)
 
 
+def test_x402_payment_required_detected_by_body_shape(make_response):
+    # A 402 whose body carries x402Version + accepts is the x402 discovery
+    # payload, not a DIEM-balance-exhausted error.
+    body = {
+        "x402Version": 2,
+        "accepts": [
+            {
+                "protocol": "x402",
+                "version": 2,
+                "network": "eip155:8453",
+                "asset": "0xUSDC",
+                "amount": "5000000",
+                "payTo": "0xreceiver",
+            }
+        ],
+    }
+    response = make_response.json(402, body)
+    with pytest.raises(VeniceX402PaymentRequiredError) as info:
+        raise_for_response(response)
+    assert info.value.status_code == 402
+    assert info.value.x402_version == 2
+    assert info.value.accepts[0]["asset"] == "0xUSDC"
+
+
+def test_plain_402_still_raises_insufficient_balance(make_response):
+    # Without x402Version + accepts, a 402 is a regular
+    # VeniceInsufficientBalanceError (Venice DIEM/USD exhausted).
+    response = make_response.json(402, {"error": "balance exhausted"})
+    with pytest.raises(VeniceInsufficientBalanceError):
+        raise_for_response(response)
+
+
 def test_non_json_body_still_raises(make_response):
     response = make_response.text(500, "<html>nginx gateway timeout</html>")
     with pytest.raises(VeniceServerError) as info:
@@ -95,5 +128,6 @@ def test_exception_hierarchy():
         VeniceServerError,
         VeniceInsufficientBalanceError,
         VeniceContentViolationError,
+        VeniceX402PaymentRequiredError,
     ]:
         assert issubclass(exc_cls, VeniceAPIError)

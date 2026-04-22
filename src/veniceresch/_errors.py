@@ -80,6 +80,42 @@ class VeniceInsufficientBalanceError(VeniceAPIError):
     """402 — Account balance (DIEM / VCU) is exhausted."""
 
 
+class VeniceX402PaymentRequiredError(VeniceAPIError):
+    """402 from an x402-protocol endpoint: payment required, not an error.
+
+    The response body carries x402 discovery info — ``x402Version`` and an
+    ``accepts`` array of payment options (network, asset, amount, payTo, …).
+    Callers sign a payment using one of those options and retry with the
+    resulting ``X-402-Payment`` header. Detected by body shape (``x402Version``
+    + ``accepts``) so non-x402 402s still raise
+    :class:`VeniceInsufficientBalanceError`.
+    """
+
+    x402_version: int | None
+    accepts: list[dict[str, Any]]
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        error_body: dict[str, Any] | str,
+        x402_version: int | None = None,
+        accepts: list[dict[str, Any]] | None = None,
+        request: httpx.Request | None = None,
+        response: httpx.Response | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            error_body=error_body,
+            request=request,
+            response=response,
+        )
+        self.x402_version = x402_version
+        self.accepts = accepts or []
+
+
 class VeniceValidationError(VeniceAPIError):
     """400 or 422 — the request was malformed or failed schema validation."""
 
@@ -182,6 +218,26 @@ def raise_for_response(response: httpx.Response) -> None:
             **kwargs,
         )
 
+    # x402 payment-required: a 402 whose body carries the x402 discovery
+    # payload (x402Version + accepts). Non-x402 402s (Venice DIEM/USD balance
+    # exhausted) still fall through to VeniceInsufficientBalanceError below.
+    if (
+        status == 402
+        and isinstance(body, dict)
+        and "x402Version" in body
+        and isinstance(body.get("accepts"), list)
+    ):
+        version = body.get("x402Version")
+        accepts = body.get("accepts")
+        raise VeniceX402PaymentRequiredError(
+            message,
+            x402_version=version if isinstance(version, int) else None,
+            accepts=[a for a in accepts if isinstance(a, dict)]
+            if isinstance(accepts, list)
+            else [],
+            **kwargs,
+        )
+
     exc_cls: type[VeniceAPIError]
     if status == 401:
         exc_cls = VeniceAuthError
@@ -228,6 +284,7 @@ __all__ = [
     "VeniceServerError",
     "VeniceTimeoutError",
     "VeniceValidationError",
+    "VeniceX402PaymentRequiredError",
     "raise_for_response",
     "translate_httpx_error",
 ]

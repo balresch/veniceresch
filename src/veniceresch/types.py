@@ -114,14 +114,22 @@ class ModelList(VeniceBaseModel):
 
     Each entry in ``data`` is a model dict with the shape of
     :class:`ModelResponse` — left as ``dict[str, Any]`` here for drift
-    tolerance. Parse a specific entry via
-    ``ModelResponse.model_validate(result.data[0])`` if you need the typed
-    form.
+    tolerance. Call :meth:`parsed_data` for the typed form, or parse a
+    single entry via ``ModelResponse.model_validate(result.data[0])``.
     """
 
     data: list[dict[str, Any]] = Field(default_factory=list)
     object: str | None = None
     type: str | None = None
+
+    def parsed_data(self) -> list[ModelResponse]:
+        """Return ``.data`` elements as typed :class:`ModelResponse` objects.
+
+        Uses ``model_construct`` so unknown fields land on
+        ``.model_extra`` rather than raising — drift-tolerant with
+        attribute access on the known fields.
+        """
+        return [ModelResponse.model_construct(**item) for item in self.data]
 
 
 class ModelTraitsResponse(VeniceBaseModel):
@@ -347,7 +355,141 @@ class CharacterReviewsResponse(VeniceBaseModel):
     summary: dict[str, Any] | None = None
 
 
+# ---- api_keys -----------------------------------------------------------
+
+
+class ApiKeyListResponse(VeniceBaseModel):
+    """Response from ``GET /api_keys``.
+
+    Each entry in ``data`` is an API-key summary (id, description,
+    ``apiKeyType``, ``last6Chars``, ``createdAt``, ``expiresAt``,
+    ``lastUsedAt``, ``consumptionLimits``, optional ``usage`` block).
+    """
+
+    data: list[dict[str, Any]] = Field(default_factory=list)
+    object: str | None = None
+
+
+class ApiKeyDetailResponse(VeniceBaseModel):
+    """Response from ``GET /api_keys/{id}`` — single key plus usage."""
+
+    data: dict[str, Any] | None = None
+
+
+class ApiKeyCreateResponse(VeniceBaseModel):
+    """Response from ``POST /api_keys``.
+
+    ``data.apiKey`` carries the raw key and is only returned once — save it
+    immediately.
+    """
+
+    data: dict[str, Any] | None = None
+    success: bool | None = None
+
+
+class ApiKeyUpdateResponse(VeniceBaseModel):
+    """Response from ``PATCH /api_keys``."""
+
+    data: dict[str, Any] | None = None
+    success: bool | None = None
+
+
+class ApiKeyDeleteResponse(VeniceBaseModel):
+    """Response from ``DELETE /api_keys``."""
+
+    success: bool | None = None
+
+
+class ApiKeyRateLimitsResponse(VeniceBaseModel):
+    """Response from ``GET /api_keys/rate_limits``.
+
+    ``data`` carries ``accessPermitted``, ``apiTier``, ``balances`` (USD
+    and DIEM), ``keyExpiration``, ``nextEpochBegins``, and ``rateLimits``
+    (a list of ``{apiModelId, rateLimits: [{amount, type}]}`` entries).
+    """
+
+    data: dict[str, Any] | None = None
+
+
+class ApiKeyRateLimitLogsResponse(VeniceBaseModel):
+    """Response from ``GET /api_keys/rate_limits/log`` — last 50 exceedances."""
+
+    data: list[dict[str, Any]] = Field(default_factory=list)
+    object: str | None = None
+
+
+class Web3KeyChallengeResponse(VeniceBaseModel):
+    """Response from ``GET /api_keys/generate_web3_key``.
+
+    ``data.token`` is the challenge to sign with the wallet's private key
+    and pass back to
+    :meth:`~veniceresch.resources.api_keys.AsyncApiKeysResource.generate_web3_key`.
+    """
+
+    data: dict[str, Any] | None = None
+    success: bool | None = None
+
+
+class Web3KeyCreateResponse(VeniceBaseModel):
+    """Response from ``POST /api_keys/generate_web3_key``.
+
+    Same shape as :class:`ApiKeyCreateResponse` — ``data.apiKey`` is the
+    raw key and is only returned once.
+    """
+
+    data: dict[str, Any] | None = None
+    success: bool | None = None
+
+
+# ---- x402 ---------------------------------------------------------------
+
+
+class X402BalanceResponse(VeniceBaseModel):
+    """Response from ``GET /x402/balance/{walletAddress}``.
+
+    ``data`` carries ``walletAddress``, ``balanceUsd``, ``canConsume``,
+    ``minimumTopUpUsd``, ``suggestedTopUpUsd``, and an optional
+    ``diemBalanceUsd`` when the wallet is linked to a Venice user.
+    """
+
+    success: bool | None = None
+    data: dict[str, Any] | None = None
+
+
+class X402TopUpResponse(VeniceBaseModel):
+    """Response from ``POST /x402/top-up`` (success — with valid payment header).
+
+    ``data`` carries ``walletAddress``, ``amountCredited``, ``newBalance``,
+    and ``paymentId``. Calling without the ``X-402-Payment`` header raises
+    :class:`~veniceresch.VeniceX402PaymentRequiredError` with the discovery
+    payload on ``.accepts``.
+    """
+
+    success: bool | None = None
+    data: dict[str, Any] | None = None
+
+
+class X402TransactionsResponse(VeniceBaseModel):
+    """Response from ``GET /x402/transactions/{walletAddress}``.
+
+    ``data`` carries ``walletAddress``, ``currentBalance``, a
+    ``transactions`` list (each with ``id``, ``amount``, ``balanceAfter``,
+    ``type``, ``createdAt``, ``requestId``, ``modelId``), and
+    ``pagination`` (``limit``, ``offset``, ``hasMore``).
+    """
+
+    success: bool | None = None
+    data: dict[str, Any] | None = None
+
+
 __all__ = [
+    "ApiKeyCreateResponse",
+    "ApiKeyDeleteResponse",
+    "ApiKeyDetailResponse",
+    "ApiKeyListResponse",
+    "ApiKeyRateLimitLogsResponse",
+    "ApiKeyRateLimitsResponse",
+    "ApiKeyUpdateResponse",
     "AudioCompleteResponse",
     "AudioQueueResponse",
     "AudioQuoteResponse",
@@ -381,8 +523,13 @@ __all__ = [
     "VideoQuoteResponse",
     "VideoRetrieveResponse",
     "VideoTranscriptionResponse",
+    "Web3KeyChallengeResponse",
+    "Web3KeyCreateResponse",
     "WebScrapeRequest",
     "WebScrapeResponse",
     "WebSearchRequest",
     "WebSearchResponse",
+    "X402BalanceResponse",
+    "X402TopUpResponse",
+    "X402TransactionsResponse",
 ]
