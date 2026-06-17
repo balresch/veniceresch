@@ -30,6 +30,7 @@ from veniceresch.resources.augment import AsyncAugmentResource, AugmentResource
 from veniceresch.resources.billing import AsyncBillingResource, BillingResource
 from veniceresch.resources.characters import AsyncCharactersResource, CharactersResource
 from veniceresch.resources.chat import AsyncChatResource, ChatResource
+from veniceresch.resources.crypto import AsyncCryptoResource, CryptoResource
 from veniceresch.resources.embeddings import AsyncEmbeddingsResource, EmbeddingsResource
 from veniceresch.resources.image import AsyncImageResource, ImageResource
 from veniceresch.resources.images import AsyncImagesResource, ImagesResource
@@ -136,6 +137,7 @@ class AsyncVeniceClient(_BaseClient):
         self.images = AsyncImagesResource(self)
         self.api_keys = AsyncApiKeysResource(self)
         self.x402 = AsyncX402Resource(self)
+        self.crypto = AsyncCryptoResource(self)
 
     async def __aenter__(self) -> Self:
         return self
@@ -185,6 +187,7 @@ class AsyncVeniceClient(_BaseClient):
         json_body: Any = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
+        no_auth: bool = False,
     ) -> Any:
         response = await self._send(
             method,
@@ -192,6 +195,7 @@ class AsyncVeniceClient(_BaseClient):
             json_body=json_body,
             params=params,
             headers=headers,
+            no_auth=no_auth,
         )
         return response.json()
 
@@ -341,6 +345,7 @@ class VeniceClient(_BaseClient):
         self.images = ImagesResource(self)
         self.api_keys = ApiKeysResource(self)
         self.x402 = X402Resource(self)
+        self.crypto = CryptoResource(self)
 
     def __enter__(self) -> Self:
         return self
@@ -390,6 +395,7 @@ class VeniceClient(_BaseClient):
         json_body: Any = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
+        no_auth: bool = False,
     ) -> Any:
         response = self._send(
             method,
@@ -397,6 +403,7 @@ class VeniceClient(_BaseClient):
             json_body=json_body,
             params=params,
             headers=headers,
+            no_auth=no_auth,
         )
         return response.json()
 

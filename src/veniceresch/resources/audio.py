@@ -19,6 +19,7 @@ from veniceresch.types import (
     AudioQuoteResponse,
     AudioRetrieveResponse,
     AudioTranscriptionResponse,
+    ClonedVoiceResponse,
 )
 
 if TYPE_CHECKING:
@@ -85,6 +86,39 @@ class AsyncAudioResource:
             }
         )
         return await self._client._request_bytes("POST", "/audio/speech", json_body=body)
+
+    async def create_cloned_voice(
+        self,
+        *,
+        file: AudioInput,
+        model: str | None = None,
+        siwx_header: str | None = None,
+        **extra: Any,
+    ) -> ClonedVoiceResponse:
+        """Clone a voice from an audio sample (multipart upload).
+
+        Returns a ``vv_<id>`` voice handle (on ``.id``) to pass back as the
+        ``voice`` argument to :meth:`create_speech` alongside the same
+        ``model``. Pass ``siwx_header`` to authenticate with an x402 wallet
+        instead of the default Bearer key.
+        """
+        files = {"file": _audio_file_tuple(file)}
+        form = _drop_none(
+            {
+                "model": model,
+                **{k: str(v) for k, v in extra.items() if v is not None},
+            }
+        )
+        headers = {"SIGN-IN-WITH-X": siwx_header} if siwx_header is not None else None
+        raw = await self._client._request_json(
+            "POST",
+            "/audio/voices",
+            files=files,
+            data=form,
+            headers=headers,
+            no_auth=siwx_header is not None,
+        )
+        return ClonedVoiceResponse.model_validate(raw)
 
     async def transcribe(
         self,
@@ -196,6 +230,33 @@ class AudioResource:
             }
         )
         return self._client._request_bytes("POST", "/audio/speech", json_body=body)
+
+    def create_cloned_voice(
+        self,
+        *,
+        file: AudioInput,
+        model: str | None = None,
+        siwx_header: str | None = None,
+        **extra: Any,
+    ) -> ClonedVoiceResponse:
+        """Sync mirror of :meth:`AsyncAudioResource.create_cloned_voice`."""
+        files = {"file": _audio_file_tuple(file)}
+        form = _drop_none(
+            {
+                "model": model,
+                **{k: str(v) for k, v in extra.items() if v is not None},
+            }
+        )
+        headers = {"SIGN-IN-WITH-X": siwx_header} if siwx_header is not None else None
+        raw = self._client._request_json(
+            "POST",
+            "/audio/voices",
+            files=files,
+            data=form,
+            headers=headers,
+            no_auth=siwx_header is not None,
+        )
+        return ClonedVoiceResponse.model_validate(raw)
 
     def transcribe(
         self,

@@ -3,6 +3,34 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.0] — 2026-06-17
+
+### Added
+
+- Synced to Venice OpenAPI spec `20260617` (was `20260418`). Endpoint
+  coverage: **41 → 44 paths**.
+- `client.crypto.*` — JSON-RPC proxy. `networks()` lists supported network
+  slugs (`GET /crypto/rpc/networks`, public/no-auth); `rpc(network, request,
+  siwx_header=…, idempotency_key=…)` proxies a single JSON-RPC 2.0 object or
+  a batch list of up to 100 (`POST /crypto/rpc/{network}`). Return mirrors
+  the request shape — `dict` for single, `list` for batch. Per-request
+  JSON-RPC errors come back as HTTP 200 items, not exceptions. New
+  `CryptoRpcNetworksResponse` type.
+- `client.audio.create_cloned_voice(file=…, model=…, siwx_header=…)` —
+  voice cloning (`POST /audio/voices`, multipart). Returns a `vv_<id>`
+  handle (`ClonedVoiceResponse`) to reuse as the `voice` argument of
+  `create_speech` with the same model.
+- `VenicePayloadTooLargeError` (413) and `VeniceProviderContentPolicyError`
+  (422, detected by `error.type == "provider_content_policy"`; carries
+  `.recommended_model` and `.credits_refunded`) — new exceptions. The latter
+  is distinct from `VeniceContentViolationError` (Venice's own safety layer,
+  keyed on `suggested_prompt`).
+- New endpoints accept the canonical `SIGN-IN-WITH-X` wallet-auth header
+  (x402). The existing `client.x402.*` methods keep the still-accepted
+  legacy `X-Sign-In-With-X` header.
+- Internal `no_auth=True` kwarg added to the client's `_request_any` helper
+  (already on `_request_json`) — needed for the public/wallet crypto routes.
+
 ## [0.4.0] — 2026-04-21
 
 ### Added

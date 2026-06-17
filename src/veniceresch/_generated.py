@@ -38,12 +38,227 @@ class ContentViolationError(VeniceBaseModel):
     ] = None
 
 
-class Error(Enum):
-    Payment_required = "Payment required"
+class Type(Enum):
+    provider_content_policy = "provider_content_policy"
+
+
+class Error(VeniceBaseModel):
+    message: Annotated[
+        str,
+        Field(
+            description="A human-readable explanation of the provider content policy rejection and the recommended next action.",
+            examples=[
+                "The selected model provider rejected this request due to its content policies. Credits have been refunded. Try using wan-2-7-text-to-video instead."
+            ],
+        ),
+    ]
+    type: Annotated[
+        Type,
+        Field(
+            description="Machine-readable error type for provider content policy rejections.",
+            examples=["provider_content_policy"],
+        ),
+    ]
+    recommended_model: Annotated[
+        str | None,
+        Field(
+            description="A model ID that can be used as an alternative when a recommendation is available.",
+            examples=["wan-2-7-text-to-video"],
+        ),
+    ] = None
+    credits_refunded: Annotated[
+        bool,
+        Field(
+            description="Whether credits were refunded for the rejected generation.",
+            examples=[True],
+        ),
+    ]
+
+
+class ProviderContentPolicyError(VeniceBaseModel):
+    error: Error
 
 
 class Code(Enum):
+    PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
+
+
+class PayloadTooLargeError(VeniceBaseModel):
+    code: Annotated[
+        Code,
+        Field(description="Machine-readable error code.", examples=["PAYLOAD_TOO_LARGE"]),
+    ]
+    error: Annotated[
+        str,
+        Field(
+            description="A description of the error",
+            examples=["File exceeds the maximum allowed size of 25 MB."],
+        ),
+    ]
+
+
+class Resource(VeniceBaseModel):
+    url: Annotated[
+        str,
+        Field(
+            description="Protected resource URL.",
+            examples=["https://api.venice.ai/api/v1/chat/completions"],
+        ),
+    ]
+    description: Annotated[
+        str,
+        Field(description="Human-readable resource description.", examples=["Venice API"]),
+    ]
+    mimeType: Annotated[
+        str, Field(description="Resource MIME type.", examples=["application/json"])
+    ]
+
+
+class Scheme(Enum):
+    exact = "exact"
+
+
+class Accept(VeniceBaseModel):
+    scheme: Annotated[Scheme, Field(description="x402 payment scheme.", examples=["exact"])]
+    network: Annotated[
+        str,
+        Field(description="Payment network for this requirement.", examples=["solana"]),
+    ]
+    asset: Annotated[
+        str,
+        Field(
+            description="USDC token address or mint for the selected network.",
+            examples=["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"],
+        ),
+    ]
+    amount: Annotated[
+        str,
+        Field(
+            description="Required payment amount in base units (USDC has 6 decimals).",
+            examples=["10000000"],
+        ),
+    ]
+    payTo: Annotated[
+        str,
+        Field(
+            description="Receiver wallet address for the selected network.",
+            examples=["8qUL23aSj7mDWdoLMXGHFvnVCT9wd7jXcysiekroADEL"],
+        ),
+    ]
+    maxTimeoutSeconds: Annotated[
+        float,
+        Field(description="Maximum time allowed for payment settlement.", examples=[300]),
+    ]
+    extra: Annotated[
+        dict[str, Any],
+        Field(
+            description="Network-specific x402 metadata. Solana requirements include a feePayer.",
+            examples=[
+                {
+                    "name": "USD Coin",
+                    "version": "2",
+                    "feePayer": "BFK9TLC3edb13K6v4YyH3DwPb5DSUpkWvb7XnqCL9b4F",
+                }
+            ],
+        ),
+    ]
+
+
+class ApiKey(VeniceBaseModel):
+    header: Annotated[
+        str,
+        Field(
+            description="API key authentication header format.",
+            examples=["Authorization: Bearer YOUR_API_KEY"],
+        ),
+    ]
+    getKey: Annotated[
+        str,
+        Field(
+            description="Where to create or manage API keys.",
+            examples=["https://venice.ai/settings/api"],
+        ),
+    ]
+    docs: Annotated[
+        str,
+        Field(
+            description="API key documentation URL.",
+            examples=["https://docs.venice.ai/api-reference"],
+        ),
+    ]
+
+
+class X402Wallet(VeniceBaseModel):
+    header: Annotated[
+        str,
+        Field(
+            description="Header used for Sign-In-With-X wallet authentication.",
+            examples=["SIGN-IN-WITH-X"],
+        ),
+    ]
+    legacyHeader: Annotated[
+        str,
+        Field(
+            description="Legacy Sign-In-With-X header accepted during migration.",
+            examples=["X-Sign-In-With-X"],
+        ),
+    ]
+    topUp: Annotated[
+        str,
+        Field(
+            description="Endpoint used to discover and submit x402 top-up payments.",
+            examples=["POST /api/v1/x402/top-up"],
+        ),
+    ]
+    docs: Annotated[
+        str,
+        Field(
+            description="x402 top-up API documentation URL.",
+            examples=["https://docs.venice.ai/api-reference/endpoint/x402/top-up"],
+        ),
+    ]
+
+
+class AuthOptions(VeniceBaseModel):
+    apiKey: ApiKey
+    x402Wallet: X402Wallet
+
+
+class X402InferencePaymentRequired1(VeniceBaseModel):
+    x402Version: Annotated[float, Field(description="x402 protocol version.", examples=[2])]
+    error: Annotated[
+        str | None,
+        Field(
+            description="Human-readable payment requirement message.",
+            examples=["Payment required"],
+        ),
+    ] = None
+    resource: Resource
+    accepts: Annotated[
+        list[Accept],
+        Field(
+            description="Protocol payment requirements. Clients should choose one entry, such as Base or Solana, and sign exactly that requirement."
+        ),
+    ]
+    extensions: Annotated[
+        dict[str, Any] | None,
+        Field(
+            description="Protocol extensions. Inference 402 responses include `sign-in-with-x` with a SIWX challenge for wallet-credit authentication."
+        ),
+    ] = None
+    authOptions: AuthOptions
+
+
+class Error1(Enum):
+    Payment_required = "Payment required"
+
+
+class Code1(Enum):
     PAYMENT_REQUIRED = "PAYMENT_REQUIRED"
+
+
+class Reason(Enum):
+    insufficient_balance = "insufficient_balance"
 
 
 class TopUpInstructions(VeniceBaseModel):
@@ -61,7 +276,7 @@ class TopUpInstructions(VeniceBaseModel):
         Field(
             description="Second step: sign the payment.",
             examples=[
-                "Sign a USDC transfer authorization using the x402 SDK (createPaymentHeader)"
+                "Choose a payment option from accepts and sign a USDC transfer authorization using the x402 SDK (createPaymentHeader)"
             ],
         ),
     ]
@@ -69,53 +284,49 @@ class TopUpInstructions(VeniceBaseModel):
         str,
         Field(
             description="Third step: submit the payment.",
-            examples=["POST /api/v1/x402/top-up with the signed X-402-Payment header"],
+            examples=["POST /api/v1/x402/top-up with the signed PAYMENT-SIGNATURE header"],
         ),
     ]
     receiverWallet: Annotated[
         str,
         Field(
-            description="Venice receiver wallet address.",
+            description="Legacy Base receiver wallet address. Prefer the selected accepts entry from /x402/top-up for network-specific payTo values.",
             examples=["<RECEIVER_WALLET_ADDRESS>"],
         ),
     ]
     tokenAddress: Annotated[
         str,
         Field(
-            description="USDC token contract address.",
+            description="Legacy Base USDC token address. Prefer the selected accepts entry from /x402/top-up for network-specific assets.",
             examples=["<USDC_TOKEN_ADDRESS>"],
         ),
     ]
     tokenDecimals: Annotated[float, Field(description="Token decimal places.", examples=[6])]
     network: Annotated[
-        str, Field(description="Target blockchain network.", examples=["eip155:8453"])
+        str,
+        Field(
+            description="Legacy Base target network. Prefer the selected accepts entry from /x402/top-up for network-specific values.",
+            examples=["eip155:8453"],
+        ),
     ]
     minimumAmountUsd: Annotated[
         float, Field(description="Minimum top-up amount in USD.", examples=[5])
     ]
 
 
-class SiwxChallenge(VeniceBaseModel):
+class Info(VeniceBaseModel):
     domain: Annotated[
         str,
         Field(description="Domain for the SIWX challenge.", examples=["api.venice.ai"]),
-    ]
-    address: Annotated[
-        str,
-        Field(
-            description="Placeholder for wallet address.",
-            examples=["{{walletAddress}}"],
-        ),
     ]
     uri: Annotated[
         str,
         Field(
             description="Resource URI for the challenge.",
-            examples=["https://api.venice.ai/api/v1/x402/top-up"],
+            examples=["https://api.venice.ai/api/v1/chat/completions"],
         ),
     ]
     version: Annotated[str, Field(description="SIWX version.", examples=["1"])]
-    chainId: Annotated[float, Field(description="Chain ID for the signature.", examples=[8453])]
     nonce: Annotated[
         str,
         Field(description="Unique nonce for replay protection.", examples=["{{nonce}}"]),
@@ -138,20 +349,67 @@ class SiwxChallenge(VeniceBaseModel):
         str,
         Field(
             description="Human-readable statement for the signature.",
-            examples=["Sign in with your wallet to access Venice x402 API"],
+            examples=["Sign in to Venice AI"],
         ),
     ]
 
 
-class X402InferencePaymentRequired(VeniceBaseModel):
-    error: Annotated[Error, Field(description="Error message indicating payment is required.")]
-    code: Annotated[Code, Field(description="Machine-readable error code.")]
+class Type1(Enum):
+    eip191 = "eip191"
+    eip1271 = "eip1271"
+    ed25519 = "ed25519"
+
+
+class SupportedChain(VeniceBaseModel):
+    chainId: Annotated[
+        str,
+        Field(
+            description="Supported chain identity.",
+            examples=["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"],
+        ),
+    ]
+    type: Annotated[
+        Type1,
+        Field(description="Signature type accepted for this chain.", examples=["ed25519"]),
+    ]
+
+
+class SiwxChallenge(VeniceBaseModel):
+    info: Info
+    supportedChains: Annotated[
+        list[SupportedChain],
+        Field(description="Supported SIWX chains and signature types."),
+    ]
+
+
+class X402InferencePaymentRequired2(VeniceBaseModel):
+    error: Annotated[Error1, Field(description="Error message indicating payment is required.")]
+    code: Annotated[Code1, Field(description="Machine-readable error code.")]
+    reason: Annotated[
+        Reason,
+        Field(description="Reason the x402-authenticated request could not proceed."),
+    ]
     message: Annotated[
         str | None,
         Field(
             description="Human-readable context about the payment requirement.",
             examples=["Insufficient x402 balance"],
         ),
+    ] = None
+    currentBalanceUsd: Annotated[
+        float | None,
+        Field(description="Current x402 credit balance for the wallet.", examples=[0.01]),
+    ] = None
+    minimumBalanceUsd: Annotated[
+        float | None,
+        Field(
+            description="Minimum x402 credit balance required before the request can run.",
+            examples=[0.1],
+        ),
+    ] = None
+    description: Annotated[
+        str | None,
+        Field(description="Protected resource description.", examples=["Venice API"]),
     ] = None
     suggestedTopUpUsd: Annotated[
         float, Field(description="Suggested amount to top up in USD.", examples=[10])
@@ -168,13 +426,19 @@ class X402InferencePaymentRequired(VeniceBaseModel):
     ]
     supportedChains: Annotated[
         list[str],
-        Field(description="List of supported blockchain networks.", examples=[["base"]]),
+        Field(description="List of supported top-up rails.", examples=[["base", "solana"]]),
     ]
     topUpInstructions: TopUpInstructions
     siwxChallenge: SiwxChallenge
 
 
-class Type(Enum):
+class X402InferencePaymentRequired(
+    RootModel[X402InferencePaymentRequired1 | X402InferencePaymentRequired2]
+):
+    root: X402InferencePaymentRequired1 | X402InferencePaymentRequired2
+
+
+class Type2(Enum):
     ephemeral = "ephemeral"
 
 
@@ -187,7 +451,7 @@ class CacheControl(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type,
+        Type2,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -195,7 +459,7 @@ class CacheControl(VeniceBaseModel):
     ]
 
 
-class Type1(Enum):
+class Type3(Enum):
     text = "text"
 
 
@@ -217,10 +481,10 @@ class Content(VeniceBaseModel):
             title="Text Content Object",
         ),
     ]
-    type: Annotated[Type1, Field(title="Text Content String")]
+    type: Annotated[Type3, Field(title="Text Content String")]
 
 
-class Type2(Enum):
+class Type4(Enum):
     ephemeral = "ephemeral"
 
 
@@ -233,7 +497,7 @@ class CacheControl1(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type2,
+        Type4,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -250,7 +514,7 @@ class ImageUrl(VeniceBaseModel):
     ]
 
 
-class Type3(Enum):
+class Type5(Enum):
     image_url = "image_url"
 
 
@@ -270,10 +534,10 @@ class Content1(VeniceBaseModel):
             title="Image URL Object",
         ),
     ]
-    type: Type3
+    type: Type5
 
 
-class Type4(Enum):
+class Type6(Enum):
     ephemeral = "ephemeral"
 
 
@@ -286,7 +550,7 @@ class CacheControl2(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type4,
+        Type6,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -322,7 +586,7 @@ class InputAudio(VeniceBaseModel):
     ] = "wav"
 
 
-class Type5(Enum):
+class Type7(Enum):
     input_audio = "input_audio"
 
 
@@ -342,10 +606,10 @@ class Content2(VeniceBaseModel):
             title="Input Audio Object",
         ),
     ]
-    type: Type5
+    type: Type7
 
 
-class Type6(Enum):
+class Type8(Enum):
     ephemeral = "ephemeral"
 
 
@@ -358,7 +622,7 @@ class CacheControl3(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type6,
+        Type8,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -366,7 +630,7 @@ class CacheControl3(VeniceBaseModel):
     ]
 
 
-class Type7(Enum):
+class Type9(Enum):
     video_url = "video_url"
 
 
@@ -388,7 +652,7 @@ class Content3(VeniceBaseModel):
             title="Cache Control",
         ),
     ] = None
-    type: Type7
+    type: Type9
     video_url: Annotated[
         VideoUrl,
         Field(
@@ -398,17 +662,7 @@ class Content3(VeniceBaseModel):
     ]
 
 
-class Role(Enum):
-    user = "user"
-
-
-class Messages(VeniceBaseModel):
-    content: str | list[Content | Content1 | Content2 | Content3]
-    name: str | None = None
-    role: Role
-
-
-class Type8(Enum):
+class Type10(Enum):
     ephemeral = "ephemeral"
 
 
@@ -421,7 +675,7 @@ class CacheControl4(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type8,
+        Type10,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -429,13 +683,83 @@ class CacheControl4(VeniceBaseModel):
     ]
 
 
-class Type9(Enum):
+class Type11(Enum):
+    file = "file"
+
+
+class File(VeniceBaseModel):
+    file_data: Annotated[
+        str,
+        Field(
+            description="The file content as a data URL (e.g., data:application/pdf;base64,...) or a publicly accessible URL. Supported formats: PDF, EPUB, DOCX, PPTX, XLSX, XLS, plain text, Markdown, CSV, JSON, and most source-code files (e.g., .py, .js, .ts, .c, .cpp, .java, .go, .rs, .ps1, .sh, .yaml, .sql)."
+        ),
+    ]
+    filename: Annotated[
+        str | None,
+        Field(
+            description="Optional filename for the file. Used for display purposes.",
+            examples=["document.pdf"],
+        ),
+    ] = None
+
+
+class Content4(VeniceBaseModel):
+    cache_control: Annotated[
+        CacheControl4 | None,
+        Field(
+            description="Optional cache control for prompt caching on supported providers.",
+            examples=[{"type": "ephemeral"}],
+            title="Cache Control",
+        ),
+    ] = None
+    type: Type11
+    file: Annotated[
+        File,
+        Field(
+            description="Object containing the file data and optional filename",
+            title="File Object",
+        ),
+    ]
+
+
+class Role(Enum):
+    user = "user"
+
+
+class Messages(VeniceBaseModel):
+    content: str | list[Content | Content1 | Content2 | Content3 | Content4]
+    name: str | None = None
+    role: Role
+
+
+class Type12(Enum):
+    ephemeral = "ephemeral"
+
+
+class CacheControl5(VeniceBaseModel):
+    ttl: Annotated[
+        str | None,
+        Field(
+            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            examples=["1h"],
+        ),
+    ] = None
+    type: Annotated[
+        Type12,
+        Field(
+            description='The type of cache control. Currently only "ephemeral" is supported.',
+            examples=["ephemeral"],
+        ),
+    ]
+
+
+class Type13(Enum):
     text = "text"
 
 
 class ContentItem(VeniceBaseModel):
     cache_control: Annotated[
-        CacheControl4 | None,
+        CacheControl5 | None,
         Field(
             description="Optional cache control for prompt caching on supported providers.",
             examples=[{"type": "ephemeral"}],
@@ -451,7 +775,7 @@ class ContentItem(VeniceBaseModel):
             title="Text Content Object",
         ),
     ]
-    type: Annotated[Type9, Field(title="Text Content String")]
+    type: Annotated[Type13, Field(title="Text Content String")]
 
 
 class ReasoningDetail(VeniceBaseModel):
@@ -494,63 +818,7 @@ class Messages2(VeniceBaseModel):
     tool_calls: list[Any] | None = None
 
 
-class Type10(Enum):
-    ephemeral = "ephemeral"
-
-
-class CacheControl5(VeniceBaseModel):
-    ttl: Annotated[
-        str | None,
-        Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
-            examples=["1h"],
-        ),
-    ] = None
-    type: Annotated[
-        Type10,
-        Field(
-            description='The type of cache control. Currently only "ephemeral" is supported.',
-            examples=["ephemeral"],
-        ),
-    ]
-
-
-class Type11(Enum):
-    text = "text"
-
-
-class ContentItem1(VeniceBaseModel):
-    cache_control: Annotated[
-        CacheControl5 | None,
-        Field(
-            description="Optional cache control for prompt caching on supported providers.",
-            examples=[{"type": "ephemeral"}],
-            title="Cache Control",
-        ),
-    ] = None
-    text: Annotated[
-        str,
-        Field(
-            description="The prompt text of the message. Must be at-least one character in length",
-            examples=["Why is the sky blue?"],
-            min_length=1,
-            title="Text Content Object",
-        ),
-    ]
-    type: Annotated[Type11, Field(title="Text Content String")]
-
-
-class Role3(Enum):
-    system = "system"
-
-
-class Messages3(VeniceBaseModel):
-    content: str | list[ContentItem1]
-    name: str | None = None
-    role: Role3
-
-
-class Type12(Enum):
+class Type14(Enum):
     ephemeral = "ephemeral"
 
 
@@ -563,7 +831,7 @@ class CacheControl6(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type12,
+        Type14,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -571,11 +839,11 @@ class CacheControl6(VeniceBaseModel):
     ]
 
 
-class Type13(Enum):
+class Type15(Enum):
     text = "text"
 
 
-class ContentItem2(VeniceBaseModel):
+class ContentItem1(VeniceBaseModel):
     cache_control: Annotated[
         CacheControl6 | None,
         Field(
@@ -593,7 +861,63 @@ class ContentItem2(VeniceBaseModel):
             title="Text Content Object",
         ),
     ]
-    type: Annotated[Type13, Field(title="Text Content String")]
+    type: Annotated[Type15, Field(title="Text Content String")]
+
+
+class Role3(Enum):
+    system = "system"
+
+
+class Messages3(VeniceBaseModel):
+    content: str | list[ContentItem1]
+    name: str | None = None
+    role: Role3
+
+
+class Type16(Enum):
+    ephemeral = "ephemeral"
+
+
+class CacheControl7(VeniceBaseModel):
+    ttl: Annotated[
+        str | None,
+        Field(
+            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            examples=["1h"],
+        ),
+    ] = None
+    type: Annotated[
+        Type16,
+        Field(
+            description='The type of cache control. Currently only "ephemeral" is supported.',
+            examples=["ephemeral"],
+        ),
+    ]
+
+
+class Type17(Enum):
+    text = "text"
+
+
+class ContentItem2(VeniceBaseModel):
+    cache_control: Annotated[
+        CacheControl7 | None,
+        Field(
+            description="Optional cache control for prompt caching on supported providers.",
+            examples=[{"type": "ephemeral"}],
+            title="Cache Control",
+        ),
+    ] = None
+    text: Annotated[
+        str,
+        Field(
+            description="The prompt text of the message. Must be at-least one character in length",
+            examples=["Why is the sky blue?"],
+            min_length=1,
+            title="Text Content Object",
+        ),
+    ]
+    type: Annotated[Type17, Field(title="Text Content String")]
 
 
 class Role4(Enum):
@@ -672,6 +996,10 @@ class StreamOptions(VeniceBaseModel):
         bool | None,
         Field(description="Whether to include usage information in the stream."),
     ] = None
+
+
+class Fallback(VeniceBaseModel):
+    model: str
 
 
 class Verbosity(Enum):
@@ -769,29 +1097,29 @@ class VeniceParameters(VeniceBaseModel):
     ] = False
 
 
-class Type14(Enum):
+class Type18(Enum):
     json_schema = "json_schema"
 
 
 class ResponseFormat(VeniceBaseModel):
     json_schema: dict[str, Any]
-    type: Type14
+    type: Type18
 
 
-class Type15(Enum):
+class Type19(Enum):
     json_object = "json_object"
 
 
 class ResponseFormat1(VeniceBaseModel):
-    type: Type15
+    type: Type19
 
 
-class Type16(Enum):
+class Type20(Enum):
     text = "text"
 
 
 class ResponseFormat2(VeniceBaseModel):
-    type: Type16
+    type: Type20
 
 
 class Function(VeniceBaseModel):
@@ -803,13 +1131,13 @@ class ToolChoice(VeniceBaseModel):
     type: str
 
 
-class Type17(Enum):
+class Type21(Enum):
     web_search = "web_search"
     x_search = "x_search"
 
 
 class Tools(VeniceBaseModel):
-    type: Type17
+    type: Type21
 
 
 class Function1(VeniceBaseModel):
@@ -905,7 +1233,7 @@ class ChatCompletionRequest(VeniceBaseModel):
         str,
         Field(
             description='The ID of the model you wish to prompt. May also be a model trait, or a model compatibility mapping. See the models endpoint for a list of models available to you. You can use feature suffixes to enable features from the venice_parameters object. Please see "Model Feature Suffix" documentation for more details.',
-            examples=["zai-org-glm-4.7"],
+            examples=["zai-org-glm-5-1"],
         ),
     ]
     n: Annotated[
@@ -1016,10 +1344,25 @@ class ChatCompletionRequest(VeniceBaseModel):
             description="This field is discarded on the request but is supported in the Venice API for compatibility with OpenAI clients."
         ),
     ] = None
+    fallbacks: Annotated[
+        list[Fallback] | None,
+        Field(
+            description="Anthropic beta parameter for Claude Fable 5 server-side refusal fallback. Forwarded only for direct Anthropic routes; ignored for other providers.",
+            examples=[[{"model": "claude-opus-4-8"}]],
+            max_length=10,
+        ),
+    ] = None
     store: Annotated[
         bool | None,
         Field(
             description="This field is accepted for OpenAI compatibility but is not used by Venice."
+        ),
+    ] = None
+    verbosity: Annotated[
+        Verbosity | None,
+        Field(
+            description="Controls the verbosity of the text response. Currently supported values are `low`, `medium`, and `high`.",
+            examples=["low"],
         ),
     ] = None
     text: Annotated[
@@ -1062,11 +1405,11 @@ class ChatCompletionRequest(VeniceBaseModel):
     ] = None
 
 
-class Type18(Enum):
+class Type22(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl7(VeniceBaseModel):
+class CacheControl8(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -1075,7 +1418,7 @@ class CacheControl7(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type18,
+        Type22,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -1099,13 +1442,13 @@ class InputAudio1(VeniceBaseModel):
     ] = "wav"
 
 
-class Type19(Enum):
+class Type23(Enum):
     input_audio = "input_audio"
 
 
 class ChatCompletionContentPartInputAudio(VeniceBaseModel):
     cache_control: Annotated[
-        CacheControl7 | None,
+        CacheControl8 | None,
         Field(
             description="Optional cache control for prompt caching on supported providers.",
             examples=[{"type": "ephemeral"}],
@@ -1119,14 +1462,14 @@ class ChatCompletionContentPartInputAudio(VeniceBaseModel):
             title="Input Audio Object",
         ),
     ]
-    type: Type19
+    type: Type23
 
 
-class Type20(Enum):
+class Type24(Enum):
     ephemeral = "ephemeral"
 
 
-class CacheControl8(VeniceBaseModel):
+class CacheControl9(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
@@ -1135,7 +1478,7 @@ class CacheControl8(VeniceBaseModel):
         ),
     ] = None
     type: Annotated[
-        Type20,
+        Type24,
         Field(
             description='The type of cache control. Currently only "ephemeral" is supported.',
             examples=["ephemeral"],
@@ -1143,20 +1486,20 @@ class CacheControl8(VeniceBaseModel):
     ]
 
 
-class Type21(Enum):
+class Type25(Enum):
     video_url = "video_url"
 
 
 class ChatCompletionContentPartVideoUrl(VeniceBaseModel):
     cache_control: Annotated[
-        CacheControl8 | None,
+        CacheControl9 | None,
         Field(
             description="Optional cache control for prompt caching on supported providers.",
             examples=[{"type": "ephemeral"}],
             title="Cache Control",
         ),
     ] = None
-    type: Type21
+    type: Type25
     video_url: Annotated[
         VideoUrl,
         Field(
@@ -1166,7 +1509,7 @@ class ChatCompletionContentPartVideoUrl(VeniceBaseModel):
     ]
 
 
-class Type22(Enum):
+class Type26(Enum):
     message = "message"
 
 
@@ -1177,16 +1520,16 @@ class Role5(Enum):
     developer = "developer"
 
 
-class Type23(Enum):
+class Type27(Enum):
     input_text = "input_text"
 
 
-class Content4(VeniceBaseModel):
-    type: Type23
+class Content5(VeniceBaseModel):
+    type: Type27
     text: str
 
 
-class Type24(Enum):
+class Type28(Enum):
     input_image = "input_image"
 
 
@@ -1201,17 +1544,17 @@ class ImageUrl1(VeniceBaseModel):
     detail: Detail | None = None
 
 
-class Content5(VeniceBaseModel):
-    type: Type24
+class Content6(VeniceBaseModel):
+    type: Type28
     image_url: ImageUrl1
 
 
-class Type25(Enum):
+class Type29(Enum):
     output_text = "output_text"
 
 
-class Content6(VeniceBaseModel):
-    type: Type25
+class Content7(VeniceBaseModel):
+    type: Type29
     text: str
     annotations: list[Any] | None = None
 
@@ -1222,23 +1565,23 @@ class Status(Enum):
 
 
 class Input(VeniceBaseModel):
-    type: Type22
+    type: Type26
     role: Role5
-    content: str | list[Content4 | Content5 | Content6]
+    content: str | list[Content5 | Content6 | Content7]
     id: str | None = None
     status: Status | None = None
 
 
-class Type26(Enum):
+class Type30(Enum):
     input_text = "input_text"
 
 
-class Content7(VeniceBaseModel):
-    type: Type26
+class Content8(VeniceBaseModel):
+    type: Type30
     text: str
 
 
-class Type27(Enum):
+class Type31(Enum):
     input_image = "input_image"
 
 
@@ -1247,31 +1590,31 @@ class ImageUrl2(VeniceBaseModel):
     detail: Detail | None = None
 
 
-class Content8(VeniceBaseModel):
-    type: Type27
+class Content9(VeniceBaseModel):
+    type: Type31
     image_url: ImageUrl2
 
 
-class Type28(Enum):
+class Type32(Enum):
     output_text = "output_text"
 
 
-class Content9(VeniceBaseModel):
-    type: Type28
+class Content10(VeniceBaseModel):
+    type: Type32
     text: str
     annotations: list[Any] | None = None
 
 
-class Type29(Enum):
+class Type33(Enum):
     text = "text"
 
 
-class Content10(VeniceBaseModel):
-    type: Type29
+class Content11(VeniceBaseModel):
+    type: Type33
     text: str
 
 
-class Type30(Enum):
+class Type34(Enum):
     image_url = "image_url"
 
 
@@ -1280,24 +1623,24 @@ class ImageUrl3(VeniceBaseModel):
     detail: Detail | None = None
 
 
-class Content11(VeniceBaseModel):
-    type: Type30
+class Content12(VeniceBaseModel):
+    type: Type34
     image_url: str | ImageUrl3
 
 
 class Input1(VeniceBaseModel):
     role: Role5
-    content: str | list[Content7 | Content8 | Content9 | Content10 | Content11]
+    content: str | list[Content8 | Content9 | Content10 | Content11 | Content12]
     id: str | None = None
     status: Status | None = None
 
 
-class Type31(Enum):
+class Type35(Enum):
     reasoning = "reasoning"
 
 
 class Input2(VeniceBaseModel):
-    type: Type31
+    type: Type35
     id: str | None = None
     summary: list[str] | None = None
     content: str | list[Any] | Any | None = None
@@ -1305,12 +1648,12 @@ class Input2(VeniceBaseModel):
     status: Status | None = None
 
 
-class Type32(Enum):
+class Type36(Enum):
     function_call = "function_call"
 
 
 class Input3(VeniceBaseModel):
-    type: Type32
+    type: Type36
     id: str | None = None
     call_id: str
     name: str
@@ -1318,22 +1661,22 @@ class Input3(VeniceBaseModel):
     status: Status | None = None
 
 
-class Type33(Enum):
+class Type37(Enum):
     function_call_output = "function_call_output"
 
 
 class Input4(VeniceBaseModel):
-    type: Type33
+    type: Type37
     call_id: str
     output: str | list[Any] | dict[str, Any] | float | bool | Any
 
 
-class Type34(Enum):
+class Type38(Enum):
     item_reference = "item_reference"
 
 
 class Input5(VeniceBaseModel):
-    type: Type34
+    type: Type38
     id: str
 
 
@@ -1347,7 +1690,7 @@ class Reasoning1(VeniceBaseModel):
     )
 
 
-class Type35(Enum):
+class Type39(Enum):
     function = "function"
 
 
@@ -1359,11 +1702,11 @@ class Function2(VeniceBaseModel):
 
 
 class Tools2(VeniceBaseModel):
-    type: Type35
+    type: Type39
     function: Function2
 
 
-class Type36(Enum):
+class Type40(Enum):
     web_search = "web_search"
 
 
@@ -1373,12 +1716,12 @@ class SearchContextSize(Enum):
     high = "high"
 
 
-class Type37(Enum):
+class Type41(Enum):
     approximate = "approximate"
 
 
 class UserLocation(VeniceBaseModel):
-    type: Type37 | None = None
+    type: Type41 | None = None
     city: str | None = None
     region: str | None = None
     country: str | None = None
@@ -1386,17 +1729,17 @@ class UserLocation(VeniceBaseModel):
 
 
 class Tools3(VeniceBaseModel):
-    type: Type36
+    type: Type40
     search_context_size: SearchContextSize | None = None
     user_location: UserLocation | None = None
 
 
-class Type38(Enum):
+class Type42(Enum):
     x_search = "x_search"
 
 
 class Tools4(VeniceBaseModel):
-    type: Type38
+    type: Type42
     allowed_x_handles: Annotated[list[str] | None, Field(max_length=10)] = None
     excluded_x_handles: Annotated[list[str] | None, Field(max_length=10)] = None
     from_date: str | None = None
@@ -1405,7 +1748,7 @@ class Tools4(VeniceBaseModel):
     enable_video_understanding: bool | None = None
 
 
-class Type39(Enum):
+class Type43(Enum):
     code_interpreter = "code_interpreter"
 
 
@@ -1414,11 +1757,11 @@ class Container(VeniceBaseModel):
 
 
 class Tools5(VeniceBaseModel):
-    type: Type39
+    type: Type43
     container: Container | None = None
 
 
-class Type40(Enum):
+class Type44(Enum):
     file_search = "file_search"
 
 
@@ -1428,18 +1771,18 @@ class RankingOptions(VeniceBaseModel):
 
 
 class Tools6(VeniceBaseModel):
-    type: Type40
+    type: Type44
     vector_store_ids: list[str] | None = None
     max_num_results: int | None = None
     ranking_options: RankingOptions | None = None
 
 
-class Type41(Enum):
+class Type45(Enum):
     computer_use_preview = "computer_use_preview"
 
 
 class Tools7(VeniceBaseModel):
-    type: Type41
+    type: Type45
     display_width: int | None = None
     display_height: int | None = None
     environment: str | None = None
@@ -1461,7 +1804,7 @@ class ToolChoice3(Enum):
     required = "required"
 
 
-class Type42(Enum):
+class Type46(Enum):
     function = "function"
 
 
@@ -1470,7 +1813,7 @@ class Function3(VeniceBaseModel):
 
 
 class ToolChoice4(VeniceBaseModel):
-    type: Type42
+    type: Type46
     function: Function3
 
 
@@ -1510,7 +1853,7 @@ class ResponsesRequest(VeniceBaseModel):
         str,
         Field(
             description="The ID of the model to use. E2EE-capable models are not supported on /api/v1/responses; use /api/v1/chat/completions with the required E2EE headers instead.",
-            examples=["zai-org-glm-5"],
+            examples=["zai-org-glm-5-1"],
         ),
     ]
     input: Annotated[
@@ -1532,6 +1875,14 @@ class ResponsesRequest(VeniceBaseModel):
     ] = None
     top_p: Annotated[
         float | None, Field(description="Nucleus sampling parameter.", ge=0.0, le=1.0)
+    ] = None
+    fallbacks: Annotated[
+        list[Fallback] | None,
+        Field(
+            description="Anthropic beta parameter for Claude Fable 5 server-side refusal fallback. Forwarded only for direct Anthropic routes; ignored for other providers.",
+            examples=[[{"model": "claude-opus-4-8"}]],
+            max_length=10,
+        ),
     ] = None
     reasoning: Annotated[Reasoning1 | None, Field(title="Reasoning Configuration")] = None
     tools: Annotated[
@@ -1562,18 +1913,18 @@ class Status4(Enum):
     cancelled = "cancelled"
 
 
-class Type43(Enum):
+class Type47(Enum):
     reasoning = "reasoning"
 
 
 class Output(VeniceBaseModel):
-    type: Type43
+    type: Type47
     id: str
     summary: list[str] | None = None
     encrypted_content: str | None = None
 
 
-class Type44(Enum):
+class Type48(Enum):
     message = "message"
 
 
@@ -1587,16 +1938,16 @@ class Role7(Enum):
     assistant = "assistant"
 
 
-class Type45(Enum):
+class Type49(Enum):
     output_text = "output_text"
 
 
-class Type46(Enum):
+class Type50(Enum):
     url_citation = "url_citation"
 
 
 class Annotation(VeniceBaseModel):
-    type: Type46
+    type: Type50
     url: str
     title: str | None = None
     start_index: int
@@ -1604,20 +1955,20 @@ class Annotation(VeniceBaseModel):
 
 
 class ContentItem3(VeniceBaseModel):
-    type: Type45
+    type: Type49
     text: str
     annotations: list[Annotation] | None = None
 
 
 class Output1(VeniceBaseModel):
-    type: Type44
+    type: Type48
     id: str
     status: Status5
     role: Role7
     content: list[ContentItem3]
 
 
-class Type47(Enum):
+class Type51(Enum):
     function_call = "function_call"
 
 
@@ -1627,7 +1978,7 @@ class Status6(Enum):
 
 
 class Output2(VeniceBaseModel):
-    type: Type47
+    type: Type51
     id: str
     call_id: str
     name: str
@@ -1635,7 +1986,7 @@ class Output2(VeniceBaseModel):
     status: Status6
 
 
-class Type48(Enum):
+class Type52(Enum):
     web_search_call = "web_search_call"
 
 
@@ -1644,7 +1995,7 @@ class Status7(Enum):
 
 
 class Output3(VeniceBaseModel):
-    type: Type48
+    type: Type52
     id: str
     status: Status7
 
@@ -1665,7 +2016,7 @@ class Usage(VeniceBaseModel):
     total_tokens: int
 
 
-class Error1(VeniceBaseModel):
+class Error2(VeniceBaseModel):
     code: str
     message: str
 
@@ -1689,7 +2040,7 @@ class ResponsesResponse(VeniceBaseModel):
         None
     )
     error: Annotated[
-        Error1 | None,
+        Error2 | None,
         Field(description="Error information if the response failed.", title="Error"),
     ] = None
 
@@ -1698,6 +2049,12 @@ class Format2(Enum):
     jpeg = "jpeg"
     png = "png"
     webp = "webp"
+
+
+class Quality(Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
 
 
 class GenerateImageRequest(VeniceBaseModel):
@@ -1755,7 +2112,7 @@ class GenerateImageRequest(VeniceBaseModel):
         str,
         Field(
             description="The model to use for image generation.",
-            examples=["z-image-turbo"],
+            examples=["grok-imagine-image"],
         ),
     ]
     negative_prompt: Annotated[
@@ -1835,6 +2192,13 @@ class GenerateImageRequest(VeniceBaseModel):
             examples=["1K"],
         ),
     ] = None
+    quality: Annotated[
+        Quality | None,
+        Field(
+            description="Output quality for supported models (e.g. GPT Image 2 / GPT Image 2 Edit). Higher values can increase the final request charge. See the model list for supported options.",
+            examples=["high"],
+        ),
+    ] = None
     enable_web_search: Annotated[
         bool | None,
         Field(
@@ -1865,7 +2229,7 @@ class OutputFormat(Enum):
     webp = "webp"
 
 
-class Quality(Enum):
+class Quality1(Enum):
     auto = "auto"
     high = "high"
     medium = "medium"
@@ -1907,7 +2271,7 @@ class SimpleGenerateImageRequest(VeniceBaseModel):
         str | None,
         Field(
             description="The model to use for image generation. Defaults to Venice's default image model. If a non-existent model is specified (ie an OpenAI model name), it will default to Venice's default image model.",
-            examples=["z-image-turbo"],
+            examples=["grok-imagine-image"],
         ),
     ] = "default"
     moderation: Annotated[
@@ -1948,7 +2312,7 @@ class SimpleGenerateImageRequest(VeniceBaseModel):
         ),
     ]
     quality: Annotated[
-        Quality | None,
+        Quality1 | None,
         Field(
             description="This parameter is not used in Venice image generation but is supported for compatibility with OpenAI API",
             examples=["auto"],
@@ -2056,8 +2420,17 @@ class EditImageRequest(VeniceBaseModel):
     aspect_ratio: Annotated[
         AspectRatio | None,
         Field(
-            description="The aspect ratio for the output image. Omit this parameter to use the model's default setting. Supported values vary by model - check GET /api/v1/models for model-specific options.",
+            description="The aspect ratio for the output image. Use 'auto' or omit this parameter to infer the closest supported aspect ratio from the input image when explicit sizing is required by the model. Supported values vary by model - check GET /api/v1/models for model-specific options.",
             examples=[969],
+        ),
+    ] = None
+    resolution: Annotated[
+        str | None,
+        Field(
+            description='Resolution tier for the output image (e.g. "1K", "2K", "4K"). Supported values vary by model - check GET /api/v1/models for model-specific options. Defaults to "1K" when not specified.',
+            examples=["1K"],
+            max_length=10,
+            min_length=1,
         ),
     ] = None
     image: Annotated[
@@ -2069,7 +2442,7 @@ class EditImageRequest(VeniceBaseModel):
     model: Annotated[
         str | None,
         Field(description="The model ID to use for image editing.", min_length=1),
-    ] = "qwen-edit"
+    ] = "firered-image-edit"
     modelId: Annotated[
         str | None,
         Field(
@@ -2078,6 +2451,13 @@ class EditImageRequest(VeniceBaseModel):
             min_length=1,
         ),
     ] = None
+    output_format: Annotated[
+        OutputFormat | None,
+        Field(
+            description="Output format for the edited image. Accepts jpeg, jpg, png, or webp. When omitted, the format is inferred from resolution: PNG for 1K edits and JPEG for 2K/4K edits.",
+            examples=["png"],
+        ),
+    ] = "png"
     prompt: Annotated[
         str,
         Field(
@@ -2096,11 +2476,31 @@ class EditImageRequest(VeniceBaseModel):
     ] = True
 
 
+class Quality2(Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
 class MultiEditImageRequest(VeniceBaseModel):
+    aspect_ratio: Annotated[
+        AspectRatio | None,
+        Field(
+            description="The aspect ratio for the output image. Use 'auto' or omit this parameter to infer the closest supported aspect ratio from the first input image when explicit sizing is required by the model.",
+            examples=[969],
+        ),
+    ] = None
     modelId: Annotated[
         str | None,
         Field(description="The model ID to use for multi-edit.", min_length=1),
-    ] = "qwen-edit"
+    ] = "firered-image-edit"
+    output_format: Annotated[
+        OutputFormat | None,
+        Field(
+            description="Output format for the edited image. Accepts jpeg, jpg, png, or webp. When omitted, the format is inferred from resolution: PNG for 1K edits and JPEG for 2K/4K edits.",
+            examples=["png"],
+        ),
+    ] = "png"
     prompt: Annotated[
         str,
         Field(
@@ -2115,6 +2515,22 @@ class MultiEditImageRequest(VeniceBaseModel):
             description="Array of 1 to 3 images used for multi-editing. The first image is treated as the base image, and the remaining images are used as edit layers/masks. Each image can be a base64-encoded string or a URL starting with http:// or https://. Image dimensions must be at least 65536 pixels and must not exceed 33177600 pixels. File size must be less than 25MB."
         ),
     ]
+    quality: Annotated[
+        Quality2 | None,
+        Field(
+            description="Output quality for supported models (e.g. GPT Image 2 / GPT Image 2 Edit). Higher values can increase the final request charge. See the model list for supported options.",
+            examples=["high"],
+        ),
+    ] = None
+    resolution: Annotated[
+        str | None,
+        Field(
+            description='Resolution tier for the output image (e.g. "1K", "2K", "4K"). Supported values vary by model - check GET /api/v1/models for model-specific options. Defaults to "1K" when not specified.',
+            examples=["1K"],
+            max_length=10,
+            min_length=1,
+        ),
+    ] = None
     safe_mode: Annotated[
         bool | None,
         Field(
@@ -2125,10 +2541,24 @@ class MultiEditImageRequest(VeniceBaseModel):
 
 
 class MultiEditImageMultipartRequest(VeniceBaseModel):
+    aspect_ratio: Annotated[
+        AspectRatio | None,
+        Field(
+            description="The aspect ratio for the output image. Use 'auto' or omit this parameter to infer the closest supported aspect ratio from the first input image when explicit sizing is required by the model.",
+            examples=[969],
+        ),
+    ] = None
     modelId: Annotated[
         str | None,
         Field(description="The model ID to use for multi-edit.", min_length=1),
-    ] = "qwen-edit"
+    ] = "firered-image-edit"
+    output_format: Annotated[
+        OutputFormat | None,
+        Field(
+            description="Output format for the edited image. Accepts jpeg, jpg, png, or webp. When omitted, the format is inferred from resolution: PNG for 1K edits and JPEG for 2K/4K edits.",
+            examples=["png"],
+        ),
+    ] = "png"
     prompt: Annotated[
         str,
         Field(
@@ -2145,6 +2575,22 @@ class MultiEditImageMultipartRequest(VeniceBaseModel):
             min_length=1,
         ),
     ]
+    quality: Annotated[
+        Quality2 | None,
+        Field(
+            description="Output quality for supported models (e.g. GPT Image 2 / GPT Image 2 Edit). Higher values can increase the final request charge. See the model list for supported options.",
+            examples=["high"],
+        ),
+    ] = None
+    resolution: Annotated[
+        str | None,
+        Field(
+            description='Resolution tier for the output image (e.g. "1K", "2K", "4K"). Supported values vary by model - check GET /api/v1/models for model-specific options. Defaults to "1K" when not specified.',
+            examples=["1K"],
+            max_length=10,
+            min_length=1,
+        ),
+    ] = None
     safe_mode: Annotated[
         bool | None,
         Field(
@@ -2293,6 +2739,8 @@ class Model1(Enum):
     tts_orpheus = "tts-orpheus"
     tts_elevenlabs_turbo_v2_5 = "tts-elevenlabs-turbo-v2-5"
     tts_minimax_speech_02_hd = "tts-minimax-speech-02-hd"
+    tts_gemini_3_1_flash = "tts-gemini-3-1-flash"
+    tts_gradium_v1 = "tts-gradium-v1"
 
 
 class ResponseFormat4(Enum):
@@ -2437,6 +2885,58 @@ class Voice(Enum):
     DeterminedMan = "DeterminedMan"
     ImposingManner = "ImposingManner"
     ElegantMan = "ElegantMan"
+    Achernar = "Achernar"
+    Achird = "Achird"
+    Algenib = "Algenib"
+    Algieba = "Algieba"
+    Alnilam = "Alnilam"
+    Aoede = "Aoede"
+    Autonoe = "Autonoe"
+    Callirrhoe = "Callirrhoe"
+    Charon = "Charon"
+    Despina = "Despina"
+    Enceladus = "Enceladus"
+    Erinome = "Erinome"
+    Fenrir = "Fenrir"
+    Gacrux = "Gacrux"
+    Iapetus = "Iapetus"
+    Kore = "Kore"
+    Laomedeia = "Laomedeia"
+    Leda = "Leda"
+    Orus = "Orus"
+    Pulcherrima = "Pulcherrima"
+    Puck = "Puck"
+    Rasalgethi = "Rasalgethi"
+    Sadachbia = "Sadachbia"
+    Sadaltager = "Sadaltager"
+    Schedar = "Schedar"
+    Sulafat = "Sulafat"
+    Umbriel = "Umbriel"
+    Vindemiatrix = "Vindemiatrix"
+    Zephyr = "Zephyr"
+    Zubenelgenubi = "Zubenelgenubi"
+    Emma = "Emma"
+    Kent = "Kent"
+    Eva = "Eva"
+    Jack = "Jack"
+    Mia = "Mia"
+    Maximilian = "Maximilian"
+    Valentina = "Valentina"
+    Sergio = "Sergio"
+    Elise = "Elise"
+    Leo = "Leo"
+    Davi = "Davi"
+
+
+class Voice1(RootModel[str]):
+    root: Annotated[
+        str,
+        Field(
+            description="The voice to use when generating the audio. Voices are model-specific: Kokoro (e.g. af_sky, af_bella, am_adam), Qwen 3 (e.g. Vivian, Serena, Dylan), xAI (eve, ara, rex, sal, leo), Orpheus (tara, leah, jess, leo, dan, mia, zac, zoe), Inworld (Craig, Ashley, ...), Chatterbox (Aurora, Blade, ...), ElevenLabs Turbo (Rachel, Aria, ...), MiniMax (WiseWoman, DeepVoiceMan, ...), Gradium (Emma, Kent, Mia, Maximilian, Valentina, Sergio, Elise, Leo, Alice, Davi — spanning en/de/es/fr/pt). You can also pass a cloned-voice handle (`vv_<id>`) returned by POST /v1/audio/voices to synthesize in a previously cloned voice; the handle must be paired with the same model used to create it. Using an incompatible voice returns a 400 error. Call GET /models/{id} to list voices for a specific model.",
+            examples=["af_sky"],
+            pattern="^vv_[A-Za-z0-9_-]+$",
+        ),
+    ] = "af_sky"
 
 
 class CreateSpeechRequestSchema(VeniceBaseModel):
@@ -2460,7 +2960,7 @@ class CreateSpeechRequestSchema(VeniceBaseModel):
     ] = None
     model: Annotated[
         Model1 | None,
-        Field(description="The model ID of a Venice TTS model.", examples=["tts-kokoro"]),
+        Field(description="The model ID of a Venice TTS model.", examples=["tts-xai-v1"]),
     ] = "tts-kokoro"
     prompt: Annotated[
         str | None,
@@ -2509,10 +3009,11 @@ class CreateSpeechRequestSchema(VeniceBaseModel):
         ),
     ] = None
     voice: Annotated[
-        Voice | None,
+        Voice | Voice1 | None,
         Field(
-            description="The voice to use when generating the audio. Voices are model-specific: Kokoro (e.g. af_sky, af_bella, am_adam), Qwen 3 (e.g. Vivian, Serena, Dylan), xAI (eve, ara, rex, sal, leo), Orpheus (tara, leah, jess, leo, dan, mia, zac, zoe), Inworld (Craig, Ashley, ...), Chatterbox (Aurora, Blade, ...), ElevenLabs Turbo (Rachel, Aria, ...), MiniMax (WiseWoman, DeepVoiceMan, ...). Using an incompatible voice returns a 400 error. Call GET /models/{id} to list voices for a specific model.",
+            description="The voice to use when generating the audio. Voices are model-specific: Kokoro (e.g. af_sky, af_bella, am_adam), Qwen 3 (e.g. Vivian, Serena, Dylan), xAI (eve, ara, rex, sal, leo), Orpheus (tara, leah, jess, leo, dan, mia, zac, zoe), Inworld (Craig, Ashley, ...), Chatterbox (Aurora, Blade, ...), ElevenLabs Turbo (Rachel, Aria, ...), MiniMax (WiseWoman, DeepVoiceMan, ...), Gradium (Emma, Kent, Mia, Maximilian, Valentina, Sergio, Elise, Leo, Alice, Davi — spanning en/de/es/fr/pt). You can also pass a cloned-voice handle (`vv_<id>`) returned by POST /v1/audio/voices to synthesize in a previously cloned voice; the handle must be paired with the same model used to create it. Using an incompatible voice returns a 400 error. Call GET /models/{id} to list voices for a specific model.",
             examples=["af_sky"],
+            validate_default=True,
         ),
     ] = "af_sky"
 
@@ -2534,14 +3035,14 @@ class CreateTranscriptionRequestSchema(VeniceBaseModel):
     file: Annotated[
         bytes | None,
         Field(
-            description="The audio file object (not a base64 string). Supported formats: WAV, WAVE, FLAC, M4A, AAC, MP4, MP3, OGG, WEBM."
+            description="The audio file object (not a base64 string). Supported formats: WAV, WAVE, FLAC, M4A, AAC, MP4, MP3, OGG, OGA, WEBM."
         ),
     ] = None
     model: Annotated[
         Model2 | None,
         Field(
             description="The model to use for transcription. See https://docs.venice.ai/models/overview for more information.",
-            examples=["nvidia/parakeet-tdt-0.6b-v3"],
+            examples=["openai/whisper-large-v3"],
         ),
     ] = "nvidia/parakeet-tdt-0.6b-v3"
     response_format: Annotated[
@@ -2567,6 +3068,67 @@ class CreateTranscriptionRequestSchema(VeniceBaseModel):
     ] = None
 
 
+class Model3(Enum):
+    tts_chatterbox_hd = "tts-chatterbox-hd"
+    tts_minimax_speech_02_hd = "tts-minimax-speech-02-hd"
+
+
+class CreateClonedVoiceRequestSchema(VeniceBaseModel):
+    file: Annotated[
+        bytes | None,
+        Field(
+            description='The voice sample audio file (multipart/form-data, field name "file"). Accepted containers depend on the selected model: `tts-chatterbox-hd` accepts MP3, WAV, FLAC, and M4A; `tts-minimax-speech-02-hd` accepts MP3 and WAV only. Recommended: a clean speech recording of at least 5–10 seconds.'
+        ),
+    ] = None
+    model: Annotated[
+        Model3 | None,
+        Field(
+            description="The Venice TTS model the cloned voice will be paired with. The returned voice handle is only valid against this model on POST /v1/audio/speech.",
+            examples=["tts-chatterbox-hd"],
+        ),
+    ] = "tts-chatterbox-hd"
+
+
+class ConfirmedTermsAndPrivacy(Enum):
+    boolean_True = True
+
+
+class ConfirmedLegalRight(Enum):
+    boolean_True = True
+
+
+class ConfirmedScreeningAcknowledged(Enum):
+    boolean_True = True
+
+
+class Seedance(VeniceBaseModel):
+    confirmed_terms_and_privacy: Annotated[
+        ConfirmedTermsAndPrivacy,
+        Field(
+            description="Confirms acceptance of the current Seedance face-media policy text returned in the needs_consent response.",
+            examples=[True],
+        ),
+    ]
+    confirmed_legal_right: Annotated[
+        ConfirmedLegalRight,
+        Field(
+            description="Confirms the API user has the legal right to use the face-bearing media.",
+            examples=[True],
+        ),
+    ]
+    confirmed_screening_acknowledged: Annotated[
+        ConfirmedScreeningAcknowledged,
+        Field(
+            description="Acknowledges that submitted media may be screened before private asset submission.",
+            examples=[True],
+        ),
+    ]
+
+
+class Consents(VeniceBaseModel):
+    seedance: Seedance | None = None
+
+
 class Duration(Enum):
     field_2s = "2s"
     field_3s = "3s"
@@ -2587,10 +3149,11 @@ class Duration(Enum):
     field_20s = "20s"
     field_25s = "25s"
     field_30s = "30s"
+    field_1_gen = "1 gen"
     Auto = "Auto"
 
 
-class AspectRatio1(Enum):
+class AspectRatio3(Enum):
     field_61 = 61
     field_123 = 123
     field_182 = 182
@@ -2634,35 +3197,41 @@ class QueueVideoRequest(VeniceBaseModel):
         str,
         Field(
             description="The model to use for video generation.",
-            examples=["wan-2-7-text-to-video"],
+            examples=["seedance-2-0-text-to-video"],
         ),
     ]
+    consents: Annotated[
+        Consents | None,
+        Field(
+            description="Optional provider-specific consent attestations. Seedance consent is required only when submitted media contains faces."
+        ),
+    ] = None
     prompt: Annotated[
         str,
         Field(
-            description="The prompt to use for video generation. Required for most models. The maximum length varies by model (default 2500 characters, up to 3500 for some models such as Seedance 2.0).",
+            description="The prompt to use for video generation. Required for most models. The maximum length varies by model (default 2500 characters, up to 10000 for some models such as Seedance 2.0).",
             examples=["Commerce being conducted in the city of Venice, Italy."],
-            max_length=3500,
+            max_length=10000,
             min_length=1,
         ),
     ]
     negative_prompt: Annotated[
         str | None,
         Field(
-            description="Optional negative prompt. The maximum length varies by model (default 2500 characters, up to 3500 for some models).",
+            description="Optional negative prompt. The maximum length varies by model (default 2500 characters, up to 10000 for some models).",
             examples=["low resolution, error, worst quality, low quality, defects"],
-            max_length=3500,
+            max_length=10000,
         ),
     ] = None
     duration: Annotated[
         Duration,
         Field(
             description="The duration of the video to generate. Available options vary by model.",
-            examples=["5s"],
+            examples=["10s"],
         ),
     ]
     aspect_ratio: Annotated[
-        AspectRatio1 | None,
+        AspectRatio3 | None,
         Field(
             description="The aspect ratio of the video. Available options vary by model. Some models do not support aspect_ratio.",
             examples=[969],
@@ -2725,6 +3294,22 @@ class QueueVideoRequest(VeniceBaseModel):
             max_length=9,
         ),
     ] = None
+    reference_video_urls: Annotated[
+        list[str] | None,
+        Field(
+            description='For models with reference video support (e.g. Seedance 2.0 R2V), up to 3 reference video URLs (`role: "reference_video"`) used to inherit subject motion, camera movement, and overall style. Per-clip 2–15 s, .mp4 or .mov, ≤50 MB; aggregate duration ≤15 s. Each must be a URL or data URL.',
+            examples=[["https://example.com/reference-clip.mp4"]],
+            max_length=3,
+        ),
+    ] = None
+    reference_audio_urls: Annotated[
+        list[str] | None,
+        Field(
+            description='For models with reference audio support (e.g. Seedance 2.0 R2V), up to 3 reference audio URLs (`role: "reference_audio"`) used as donors for vocal timbre, narration, or sound effects. Per-clip 2–15 s, .wav or .mp3; aggregate duration ≤15 s. Must be paired with at least one reference image or reference video — audio-only Reference workflows are rejected at validation. Each must be a URL or data URL.',
+            examples=[["data:audio/mpeg;base64,SUQzBAAAAAA..."]],
+            max_length=3,
+        ),
+    ] = None
     elements: Annotated[
         list[Element] | None,
         Field(
@@ -2755,18 +3340,18 @@ class QuoteVideoRequest(VeniceBaseModel):
         str,
         Field(
             description="The model to get a price quote for.",
-            examples=["wan-2-7-text-to-video"],
+            examples=["seedance-2-0-text-to-video"],
         ),
     ]
     duration: Annotated[
         Duration,
         Field(
             description="The duration of the video. Available options vary by model.",
-            examples=["5s"],
+            examples=["10s"],
         ),
     ]
     aspect_ratio: Annotated[
-        AspectRatio1 | None,
+        AspectRatio3 | None,
         Field(
             description="The aspect ratio. Required for some models with megapixel-rate pricing.",
             examples=[969],
@@ -2795,6 +3380,14 @@ class QuoteVideoRequest(VeniceBaseModel):
         Field(
             description="For upscale models, the video to upscale. Required to auto-detect duration for pricing.",
             examples=["data:video/mp4;base64,AAAAFGZ0eXA..."],
+        ),
+    ] = None
+    reference_video_total_duration: Annotated[
+        float | None,
+        Field(
+            description="For R2V models (e.g. Seedance 2.0 R2V), the aggregate duration in seconds of all reference videos to include in the quote (max 45s; per-clip 2–15s, total ≤15s for Seedance). When provided, the quote reflects the BytePlus 'input with video' rate tier and the (input+output)×pixels token formula. When omitted, the quote returns the no-reference baseline.",
+            examples=[5],
+            ge=0.0,
         ),
     ] = None
 
@@ -2861,7 +3454,7 @@ class TextParserRequest(VeniceBaseModel):
     file: Annotated[
         bytes | None,
         Field(
-            description="The document file to parse. Supported formats: PDF, DOCX, XLSX, and plain text files. Maximum size: 25MB."
+            description="The document file to parse. Supported formats: PDF, EPUB, DOCX, PPTX, XLSX, plain text, Markdown, CSV, JSON, and most source-code files (e.g., .py, .js, .ts, .c, .cpp, .java, .go, .rs, .ps1, .sh, .yaml, .sql). Maximum size: 25MB."
         ),
     ] = None
     response_format: Annotated[
@@ -3251,9 +3844,7 @@ class BreakdownItem(VeniceBaseModel):
 
 
 class ByModelItem(VeniceBaseModel):
-    modelName: Annotated[
-        str, Field(description="Display name of the model", examples=["Llama 3.3 70B"])
-    ]
+    modelName: Annotated[str, Field(description="Display name of the model", examples=["GLM 5.1"])]
     unitType: Annotated[
         str,
         Field(
@@ -3373,13 +3964,41 @@ class Privacy(Enum):
 
 
 class Deprecation(VeniceBaseModel):
+    autoRemap: Annotated[
+        bool,
+        Field(
+            description="When true, Venice may automatically remap API requests for this model ID to replacementModelId instead of returning an error.",
+            examples=[False],
+        ),
+    ]
     date: Annotated[
         str,
         Field(
-            description="The ISO 8601 date when this model is scheduled to be deprecated",
+            description="Legacy ISO 8601 instant aligned with the deprecation sunset used in response headers (`x-venice-model-deprecation-date`). Prefer startsAt / removesAt for new integrations.",
             examples=["2025-03-01T00:00:00.000Z"],
         ),
     ]
+    removesAt: Annotated[
+        str,
+        Field(
+            description="ISO 8601 instant when this model ID is omitted from public GET /models listings (same value as `date` today). Consumers should treat the current wall-clock time as past this instant when deciding whether the model remains listed.",
+            examples=["2025-04-01T00:00:00.000Z"],
+        ),
+    ]
+    replacementModelId: Annotated[
+        str | None,
+        Field(
+            description="Suggested public API model ID to migrate to, when one exists.",
+            examples=["llama-3-3-70b"],
+        ),
+    ] = None
+    startsAt: Annotated[
+        str | None,
+        Field(
+            description="ISO 8601 instant when deprecation warnings and documentation should be considered active for this model.",
+            examples=["2025-03-01T00:00:00.000Z"],
+        ),
+    ] = None
 
 
 class Quantization(Enum):
@@ -3390,6 +4009,26 @@ class Quantization(Enum):
     int8 = "int8"
     int4 = "int4"
     not_available = "not-available"
+
+
+class ReasoningEffortOption(Enum):
+    none = "none"
+    minimal = "minimal"
+    low = "low"
+    medium = "medium"
+    high = "high"
+    xhigh = "xhigh"
+    max = "max"
+
+
+class DefaultReasoningEffort(Enum):
+    none = "none"
+    minimal = "minimal"
+    low = "low"
+    medium = "medium"
+    high = "high"
+    xhigh = "xhigh"
+    max = "max"
 
 
 class Capabilities(VeniceBaseModel):
@@ -3404,6 +4043,9 @@ class Capabilities(VeniceBaseModel):
         bool,
         Field(description="Does the LLM model support function calling?", examples=[True]),
     ]
+    supportsAudioInput: Annotated[
+        bool, Field(description="Does the LLM support audio input?", examples=[False])
+    ]
     supportsReasoning: Annotated[
         bool,
         Field(
@@ -3414,10 +4056,24 @@ class Capabilities(VeniceBaseModel):
     supportsReasoningEffort: Annotated[
         bool,
         Field(
-            description="Does the model support the reasoning_effort parameter to control reasoning depth (low, medium, high).",
+            description="Does the model support the reasoning_effort parameter to control reasoning depth.",
             examples=[True],
         ),
     ]
+    reasoningEffortOptions: Annotated[
+        list[ReasoningEffortOption] | None,
+        Field(
+            description='Supported reasoning_effort values for this model. Only present when supportsReasoningEffort is true. The "none" option means reasoning can be disabled.',
+            examples=[["none", "low", "medium", "high"]],
+        ),
+    ] = None
+    defaultReasoningEffort: Annotated[
+        DefaultReasoningEffort | None,
+        Field(
+            description="Default reasoning_effort value used when the request does not specify one. Only present when supportsReasoningEffort is true.",
+            examples=["medium"],
+        ),
+    ] = None
     supportsResponseSchema: Annotated[
         bool,
         Field(
@@ -3479,6 +4135,12 @@ class Capabilities(VeniceBaseModel):
     ]
 
 
+class DefaultQuality(Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
 class Steps(VeniceBaseModel):
     default: Annotated[
         float, Field(description="The default steps value for the model", examples=[25])
@@ -3511,10 +4173,6 @@ class Constraints(VeniceBaseModel):
             examples=["1K"],
         ),
     ] = None
-    promptCharacterLimit: Annotated[
-        float,
-        Field(description="The maximum supported prompt length.", examples=[2048]),
-    ]
     resolutions: Annotated[
         list[str] | None,
         Field(
@@ -3522,6 +4180,24 @@ class Constraints(VeniceBaseModel):
             examples=[["1K", "2K", "4K"]],
         ),
     ] = None
+    defaultQuality: Annotated[
+        DefaultQuality | None,
+        Field(
+            description="The default quality for this model. Only present for models that accept the `quality` request parameter (currently GPT Image 2).",
+            examples=["high"],
+        ),
+    ] = None
+    qualities: Annotated[
+        list[Quality2] | None,
+        Field(
+            description="Supported quality options for this model. Only present for models that accept the `quality` request parameter (currently GPT Image 2).",
+            examples=[["low", "medium", "high"]],
+        ),
+    ] = None
+    promptCharacterLimit: Annotated[
+        float,
+        Field(description="The maximum supported prompt length.", examples=[2048]),
+    ]
     steps: Steps
     widthHeightDivisor: Annotated[
         float,
@@ -3652,6 +4328,41 @@ class Constraints3(VeniceBaseModel):
             examples=[True],
         ),
     ]
+    singleImageAspectRatio: Annotated[
+        bool | None,
+        Field(
+            description="If false, output dimensions match the input on single-image edits and `aspect_ratio` is ignored. Multi-image edits are unaffected. Defaults to true.",
+            examples=[True],
+        ),
+    ] = None
+    defaultResolution: Annotated[
+        str | None,
+        Field(
+            description="The default resolution for this inpaint model. Only present for models that support resolution selection (e.g. GPT Image 2 Edit).",
+            examples=["1K"],
+        ),
+    ] = None
+    resolutions: Annotated[
+        list[str] | None,
+        Field(
+            description="Supported resolution options for this inpaint model. Only present for models that support resolution selection.",
+            examples=[["1K", "2K", "4K"]],
+        ),
+    ] = None
+    defaultQuality: Annotated[
+        DefaultQuality | None,
+        Field(
+            description="The default quality for this inpaint model. Only present for models that accept the `quality` request parameter (currently GPT Image 2 Edit).",
+            examples=["high"],
+        ),
+    ] = None
+    qualities: Annotated[
+        list[Quality2] | None,
+        Field(
+            description="Supported quality options for this inpaint model. Only present for models that accept the `quality` request parameter (currently GPT Image 2 Edit).",
+            examples=[["low", "medium", "high"]],
+        ),
+    ] = None
 
 
 class Input10(VeniceBaseModel):
@@ -3819,6 +4530,27 @@ class Resolutions(VeniceBaseModel):
     diem: Annotated[float, Field(description="Diem cost for this resolution", examples=[0.18])]
 
 
+class Low(VeniceBaseModel):
+    usd: Annotated[float, Field(description="USD cost for this resolution", examples=[0.18])]
+    diem: Annotated[float, Field(description="Diem cost for this resolution", examples=[0.18])]
+
+
+class Medium(VeniceBaseModel):
+    usd: Annotated[float, Field(description="USD cost for this resolution", examples=[0.18])]
+    diem: Annotated[float, Field(description="Diem cost for this resolution", examples=[0.18])]
+
+
+class High(VeniceBaseModel):
+    usd: Annotated[float, Field(description="USD cost for this resolution", examples=[0.18])]
+    diem: Annotated[float, Field(description="Diem cost for this resolution", examples=[0.18])]
+
+
+class Quality6(VeniceBaseModel):
+    low: Low | None = None
+    medium: Medium | None = None
+    high: High | None = None
+
+
 class Field2x(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost for 2x upscale", examples=[0.02])]
     diem: Annotated[float, Field(description="Diem cost for 2x upscale", examples=[0.2])]
@@ -3844,12 +4576,37 @@ class Pricing1(VeniceBaseModel):
     resolutions: Annotated[
         dict[str, Resolutions] | None,
         Field(
-            description='Resolution-specific pricing. Keys are resolution names (e.g., "1K", "2K", "4K"). Only present for models that support resolution selection. When present, "generation" pricing will not be included.',
+            description='Resolution-specific pricing. Keys are resolution tiers (e.g. "1K", "2K", "4K"). Only present for models that support resolution selection. When present, replaces `generation`.',
             examples=[
                 {
                     "1K": {"usd": 0.18, "diem": 0.18},
                     "2K": {"usd": 0.24, "diem": 0.24},
                     "4K": {"usd": 0.35, "diem": 0.35},
+                }
+            ],
+        ),
+    ] = None
+    quality: Annotated[
+        dict[str, Quality6] | None,
+        Field(
+            description="Per-(resolution, quality) pricing. Only present for models that accept the `quality` request parameter (currently GPT Image 2 / GPT Image 2 Edit).",
+            examples=[
+                {
+                    "1K": {
+                        "high": {"usd": 0.27, "diem": 0.27},
+                        "low": {"usd": 0.02, "diem": 0.02},
+                        "medium": {"usd": 0.07, "diem": 0.07},
+                    },
+                    "2K": {
+                        "high": {"usd": 0.5, "diem": 0.5},
+                        "low": {"usd": 0.03, "diem": 0.03},
+                        "medium": {"usd": 0.13, "diem": 0.13},
+                    },
+                    "4K": {
+                        "high": {"usd": 0.83, "diem": 0.83},
+                        "low": {"usd": 0.05, "diem": 0.05},
+                        "medium": {"usd": 0.21, "diem": 0.21},
+                    },
                 }
             ],
         ),
@@ -3892,8 +4649,52 @@ class Inpaint(VeniceBaseModel):
     ]
 
 
+class Quality7(VeniceBaseModel):
+    low: Low | None = None
+    medium: Medium | None = None
+    high: High | None = None
+
+
 class Pricing4(VeniceBaseModel):
     inpaint: Inpaint
+    resolutions: Annotated[
+        dict[str, Resolutions] | None,
+        Field(
+            description='Resolution-specific pricing. Keys are resolution tiers (e.g. "1K", "2K", "4K"). Only present for inpaint models that support resolution selection.',
+            examples=[
+                {
+                    "1K": {"usd": 0.36, "diem": 0.36},
+                    "2K": {"usd": 0.53, "diem": 0.53},
+                    "4K": {"usd": 0.85, "diem": 0.85},
+                }
+            ],
+        ),
+    ] = None
+    quality: Annotated[
+        dict[str, Quality7] | None,
+        Field(
+            description="Per-(resolution, quality) pricing. Only present for models that accept the `quality` request parameter (currently GPT Image 2 / GPT Image 2 Edit).",
+            examples=[
+                {
+                    "1K": {
+                        "high": {"usd": 0.27, "diem": 0.27},
+                        "low": {"usd": 0.02, "diem": 0.02},
+                        "medium": {"usd": 0.07, "diem": 0.07},
+                    },
+                    "2K": {
+                        "high": {"usd": 0.5, "diem": 0.5},
+                        "low": {"usd": 0.03, "diem": 0.03},
+                        "medium": {"usd": 0.13, "diem": 0.13},
+                    },
+                    "4K": {
+                        "high": {"usd": 0.83, "diem": 0.83},
+                        "low": {"usd": 0.05, "diem": 0.05},
+                        "medium": {"usd": 0.21, "diem": 0.21},
+                    },
+                }
+            ],
+        ),
+    ] = None
 
 
 class Generation1(VeniceBaseModel):
@@ -3952,12 +4753,48 @@ class Pricing8(VeniceBaseModel):
     per_thousand_characters: PerThousandCharacters
 
 
+class Mode(Enum):
+    zero_shot = "zero_shot"
+    persistent = "persistent"
+
+
+class VoiceCloning(VeniceBaseModel):
+    mode: Annotated[
+        Mode,
+        Field(
+            description="How the upstream provider implements voice cloning. `zero_shot` re-reads the reference audio on every synthesis call and never derives a persistent voice template (e.g. Chatterbox HD). `persistent` derives a custom voice template upstream that survives across synthesis calls (e.g. MiniMax Speech-02 HD).",
+            examples=["zero_shot"],
+        ),
+    ]
+    accepted_formats: Annotated[
+        list[str],
+        Field(
+            description="Audio container formats this model accepts as a reference sample on POST /v1/audio/voices. Samples in other containers are rejected with HTTP 400 before any upload.",
+            examples=[["mp3", "wav", "flac", "mp4"]],
+        ),
+    ]
+    min_sample_seconds: Annotated[
+        float,
+        Field(
+            description="Recommended minimum length of the reference audio sample, in seconds, for an intelligible clone.",
+            examples=[5],
+        ),
+    ]
+    retention_days: Annotated[
+        float,
+        Field(
+            description="Days a `vv_<id>` voice handle remains valid against this model. For `persistent` models the upstream provider auto-deletes the cloned voice after this many days without use; each successful TTS request resets the window. For `zero_shot` models this is the storage TTL on the uploaded reference audio; the handle stops working when it expires and the user must re-upload.",
+            examples=[7],
+        ),
+    ]
+
+
 class ModelSpec(VeniceBaseModel):
     availableContextTokens: Annotated[
         float | None,
         Field(
             description="The context length supported by the model. Only applicable for text models.",
-            examples=[200000],
+            examples=[1000000],
         ),
     ] = None
     maxCompletionTokens: Annotated[
@@ -3995,7 +4832,14 @@ class ModelSpec(VeniceBaseModel):
     deprecation: Annotated[
         Deprecation | None,
         Field(
-            description="Deprecation information for the model. Only present for models scheduled to be retired"
+            description="Deprecation information for the model. Only present for models scheduled to be retired",
+            examples=[
+                {
+                    "autoRemap": False,
+                    "date": "2025-03-01T00:00:00.000Z",
+                    "removesAt": "2025-03-01T00:00:00.000Z",
+                }
+            ],
         ),
     ] = None
     capabilities: Annotated[
@@ -4015,13 +4859,13 @@ class ModelSpec(VeniceBaseModel):
         ),
     ] = None
     name: Annotated[
-        str | None, Field(description="The name of the model.", examples=["GLM 5.1"])
+        str | None, Field(description="The name of the model.", examples=["GLM 5.2"])
     ] = None
     modelSource: Annotated[
         str | None,
         Field(
             description="The source of the model, such as a URL to the model repository.",
-            examples=["https://huggingface.co/zai-org/GLM-5.1"],
+            examples=["https://huggingface.co/zai-org/GLM-5.2"],
         ),
     ] = None
     offline: Annotated[
@@ -4094,7 +4938,14 @@ class ModelSpec(VeniceBaseModel):
         list[str] | None,
         Field(
             description="The voices available for this model. Applicable for TTS models and voice-enabled music models. Note: each model has its own set of supported voices.",
-            examples=[["Aiden", "Alex", "Alice", "Aria", "Ashley"]],
+            examples=[["Achernar", "Achird", "Aiden", "Alex", "Algenib"]],
+        ),
+    ] = None
+    voice_cloning: Annotated[
+        VoiceCloning | None,
+        Field(
+            description="Voice-cloning capability. Only present for TTS models whose cloning endpoint is publicly available — pass the model to POST /v1/audio/voices to mint a `vv_<id>` voice handle, then pass that handle back as the `voice` parameter on POST /v1/audio/speech alongside the same `model`. Models with cloning gated behind a private alpha (e.g. MiniMax during the biometric-data legal review) omit this field for non-staff callers; the model itself still appears in the listing.",
+            title="TTS Voice Cloning",
         ),
     ] = None
     default_voice: Annotated[
@@ -4200,7 +5051,7 @@ class OwnedBy(Enum):
     venice_ai = "venice.ai"
 
 
-class Type49(Enum):
+class Type53(Enum):
     asr = "asr"
     embedding = "embedding"
     image = "image"
@@ -4213,15 +5064,22 @@ class Type49(Enum):
 
 
 class ModelResponse(VeniceBaseModel):
+    context_length: Annotated[
+        float | None,
+        Field(
+            description="The context length (maximum input tokens) supported by the model. Only present for text models. This is a standard OpenAI-compatible field that mirrors model_spec.availableContextTokens for client compatibility.",
+            examples=[131072],
+        ),
+    ] = None
     created: Annotated[
         float | None,
         Field(description="Release date on Venice API", examples=[1699000000]),
     ] = None
-    id: Annotated[str, Field(description="Model ID", examples=["zai-org-glm-5-1"])]
+    id: Annotated[str, Field(description="Model ID", examples=["zai-org-glm-5-2"])]
     model_spec: ModelSpec
     object: Annotated[Object1, Field(description="Object type", examples=["model"])]
     owned_by: Annotated[OwnedBy, Field(description="Who runs the model", examples=["venice.ai"])]
-    type: Annotated[Type49, Field(description="Model type", examples=["text"])]
+    type: Annotated[Type53, Field(description="Model type", examples=["text"])]
 
 
 class ModelTraitSchema(RootModel[dict[str, str]]):

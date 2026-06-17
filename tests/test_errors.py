@@ -10,6 +10,8 @@ from veniceresch import (
     VeniceContentViolationError,
     VeniceInsufficientBalanceError,
     VeniceNotFoundError,
+    VenicePayloadTooLargeError,
+    VeniceProviderContentPolicyError,
     VeniceRateLimitError,
     VeniceServerError,
     VeniceValidationError,
@@ -30,6 +32,7 @@ def test_2xx_response_is_noop(make_response):
         (401, VeniceAuthError),
         (402, VeniceInsufficientBalanceError),
         (404, VeniceNotFoundError),
+        (413, VenicePayloadTooLargeError),
         (422, VeniceValidationError),
         (429, VeniceRateLimitError),
         (500, VeniceServerError),
@@ -67,6 +70,35 @@ def test_content_violation_precedence_over_status(make_response):
     response = make_response.json(422, body)
     with pytest.raises(VeniceContentViolationError):
         raise_for_response(response)
+
+
+def test_provider_content_policy_detected_by_body_shape(make_response):
+    # A 422 whose nested error.type is provider_content_policy is a provider
+    # rejection (credits refunded), distinct from VeniceContentViolationError.
+    body = {
+        "error": {
+            "message": "Provider rejected this request. Try wan-2-7-text-to-video.",
+            "type": "provider_content_policy",
+            "recommended_model": "wan-2-7-text-to-video",
+            "credits_refunded": True,
+        }
+    }
+    response = make_response.json(422, body)
+    with pytest.raises(VeniceProviderContentPolicyError) as info:
+        raise_for_response(response)
+    assert info.value.status_code == 422
+    assert info.value.recommended_model == "wan-2-7-text-to-video"
+    assert info.value.credits_refunded is True
+    assert "Provider rejected" in str(info.value)
+
+
+def test_payload_too_large_body_preserved(make_response):
+    body = {"code": "PAYLOAD_TOO_LARGE", "error": "File exceeds 25 MB."}
+    response = make_response.json(413, body)
+    with pytest.raises(VenicePayloadTooLargeError) as info:
+        raise_for_response(response)
+    assert info.value.status_code == 413
+    assert str(info.value) == "File exceeds 25 MB."
 
 
 def test_x402_payment_required_detected_by_body_shape(make_response):

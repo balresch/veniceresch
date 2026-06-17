@@ -184,6 +184,19 @@ Queued audio generation mirrors video — `client.audio.queue(...)` →
 `wait_for_completion(...)` → `AudioRetrieveResponse`, then
 `retrieve_binary(...)` for the audio bytes.
 
+**Voice cloning.** `client.audio.create_cloned_voice(...)` uploads a sample
+(multipart) and returns a `vv_<id>` handle to reuse as the `voice` argument
+of `create_speech` with the same `model`. Handles expire after ~7 days.
+
+```python
+voice = await client.audio.create_cloned_voice(
+    file=Path("sample.mp3"), model="tts-chatterbox-hd",
+)
+mp3 = await client.audio.create_speech(
+    input="Now in the cloned voice.", voice=voice.id, model="tts-chatterbox-hd",
+)
+```
+
 ## Models / embeddings / billing
 
 ```python
@@ -297,6 +310,27 @@ except VeniceX402PaymentRequiredError as exc:
     print(credited.data["newBalance"])
 ```
 
+## Crypto JSON-RPC proxy
+
+`client.crypto` proxies JSON-RPC 2.0 calls to supported chains, billed per
+credit. `networks()` lists valid network slugs (public, no auth). `rpc()`
+mirrors the request shape — a `dict` for a single call, a `list` for a batch
+of up to 100. Pass `siwx_header=` to pay with an x402 wallet instead of the
+default API key, or `idempotency_key=` for safe retries.
+
+```python
+slugs = (await client.crypto.networks()).networks
+
+chain_id = await client.crypto.rpc(
+    "ethereum-mainnet",
+    {"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1},
+)
+print(chain_id["result"])
+```
+
+Per-request JSON-RPC failures come back as HTTP 200 with an `error` field on
+the response item — they do not raise.
+
 ## Auto-pagination
 
 Four list endpoints ship companion `iter_*` methods that walk every
@@ -333,7 +367,9 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 | `VeniceInsufficientBalanceError` | 402 — balance exhausted |
 | `VeniceX402PaymentRequiredError` | 402 from an x402 endpoint — body is an x402 discovery payload (`x402_version`, `accepts`), not an error |
 | `VeniceValidationError` | 400 / 422 — bad request shape |
+| `VeniceProviderContentPolicyError` | 422 — upstream provider rejected on content policy (`recommended_model`, `credits_refunded`); detected by body shape |
 | `VeniceNotFoundError` | 404 |
+| `VenicePayloadTooLargeError` | 413 — request payload exceeds Venice's size limit |
 | `VeniceRateLimitError` | 429 |
 | `VeniceServerError` | 5xx |
 | `VeniceContentViolationError` | body contained `suggested_prompt` (any status) |
@@ -404,7 +440,7 @@ VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 | responses | `/responses` (streaming + non-streaming) | — |
 | image | `/image/generate`, `/image/edit`, `/image/multi-edit`, `/image/upscale`, `/image/background-remove`, `/image/styles`, `/images/generations` (OpenAI alias via `client.images.generate`) | — |
 | video | `/video/queue`, `/video/retrieve`, `/video/quote`, `/video/complete`, `/video/transcriptions` | — |
-| audio | `/audio/speech`, `/audio/transcriptions`, `/audio/queue`, `/audio/retrieve`, `/audio/quote`, `/audio/complete` | — |
+| audio | `/audio/speech`, `/audio/voices` (voice cloning), `/audio/transcriptions`, `/audio/queue`, `/audio/retrieve`, `/audio/quote`, `/audio/complete` | — |
 | models | `/models`, `/models/traits`, `/models/compatibility_mapping` | — |
 | embeddings | `/embeddings` | — |
 | billing | `/billing/balance`, `/billing/usage`, `/billing/usage-analytics` | — |
@@ -412,8 +448,9 @@ VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 | characters | `/characters`, `/characters/{slug}`, `/characters/{slug}/reviews` | — |
 | api_keys | `/api_keys` (list/create/update/delete), `/api_keys/{id}`, `/api_keys/rate_limits`, `/api_keys/rate_limits/log`, `/api_keys/generate_web3_key` (GET + POST) | — |
 | x402 | `/x402/balance/{walletAddress}`, `/x402/top-up`, `/x402/transactions/{walletAddress}` | — |
+| crypto | `/crypto/rpc/networks`, `/crypto/rpc/{network}` (JSON-RPC proxy) | — |
 
-All 41 paths in Venice's current OpenAPI spec are covered. The x402 and
+All 44 paths in Venice's current OpenAPI spec are covered. The x402 and
 web3 endpoints use wallet-based auth — this SDK accepts the signed header
 payloads you produce (SIWE / `X-402-Payment`) and forwards them verbatim;
 it does not bundle a wallet signer.

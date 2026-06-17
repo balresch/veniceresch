@@ -49,6 +49,43 @@ async def test_transcribe_multipart_upload(mock_api, async_client, tmp_path):
     assert b"whisper-1" in body
 
 
+async def test_create_cloned_voice_multipart(mock_api, async_client, tmp_path):
+    sample = tmp_path / "voice.mp3"
+    sample.write_bytes(b"MP3SAMPLE")
+    route = mock_api.post("/audio/voices").respond(
+        200,
+        json={"id": "vv_abc123", "model": "tts-chatterbox-hd"},
+    )
+    result = await async_client.audio.create_cloned_voice(
+        file=sample,
+        model="tts-chatterbox-hd",
+    )
+    assert result.id == "vv_abc123"
+    assert result.model == "tts-chatterbox-hd"
+    req = route.calls.last.request
+    assert req.headers["content-type"].startswith("multipart/form-data")
+    assert b"MP3SAMPLE" in req.content
+    assert b"tts-chatterbox-hd" in req.content
+    # Default bearer auth is used when no siwx header is given.
+    assert req.headers["Authorization"].startswith("Bearer ")
+
+
+async def test_create_cloned_voice_siwx(mock_api, async_client, tmp_path):
+    sample = tmp_path / "voice.wav"
+    sample.write_bytes(b"WAVSAMPLE")
+    route = mock_api.post("/audio/voices").respond(
+        200, json={"id": "vv_xyz", "model": "tts-minimax-speech-02-hd"}
+    )
+    await async_client.audio.create_cloned_voice(
+        file=sample,
+        model="tts-minimax-speech-02-hd",
+        siwx_header="siwx-payload",
+    )
+    req = route.calls.last.request
+    assert req.headers["SIGN-IN-WITH-X"] == "siwx-payload"
+    assert "Authorization" not in req.headers
+
+
 async def test_audio_queue(mock_api, async_client):
     route = mock_api.post("/audio/queue").respond(
         200, json={"model": "a", "queue_id": "a-1", "status": "QUEUED"}

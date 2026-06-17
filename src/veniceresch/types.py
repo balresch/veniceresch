@@ -305,6 +305,19 @@ class AudioTranscriptionResponse(VeniceBaseModel):
     timestamps: dict[str, Any] | None = None
 
 
+class ClonedVoiceResponse(VeniceBaseModel):
+    """Response from ``POST /audio/voices`` (voice cloning).
+
+    ``id`` is the ``vv_<id>`` voice handle — pass it back as the ``voice``
+    argument to ``audio.create_speech`` alongside the same ``model`` used to
+    create it. Handles expire after the per-model retention window (currently
+    7 days).
+    """
+
+    id: str | None = None
+    model: str | None = None
+
+
 # ---- augment ------------------------------------------------------------
 
 
@@ -441,6 +454,19 @@ class Web3KeyCreateResponse(VeniceBaseModel):
     success: bool | None = None
 
 
+# ---- crypto -------------------------------------------------------------
+
+
+class CryptoRpcNetworksResponse(VeniceBaseModel):
+    """Response from ``GET /crypto/rpc/networks``.
+
+    ``networks`` is the alphabetically sorted list of network slugs accepted
+    as the ``network`` path segment by ``POST /crypto/rpc/{network}``.
+    """
+
+    networks: list[str] = Field(default_factory=list)
+
+
 # ---- x402 ---------------------------------------------------------------
 
 
@@ -503,6 +529,8 @@ __all__ = [
     "CharacterReviewsResponse",
     "ChatCompletionChunk",
     "ChatCompletionResponse",
+    "ClonedVoiceResponse",
+    "CryptoRpcNetworksResponse",
     "EmbeddingsResponse",
     "GenerateImageResponse",
     "ImageStylesResponse",

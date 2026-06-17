@@ -120,6 +120,49 @@ class VeniceValidationError(VeniceAPIError):
     """400 or 422 — the request was malformed or failed schema validation."""
 
 
+class VenicePayloadTooLargeError(VeniceAPIError):
+    """413 — the request payload exceeds Venice's size limit.
+
+    Body carries a ``PAYLOAD_TOO_LARGE`` code and a human-readable ``error``
+    describing the limit (e.g. an oversized voice-cloning sample or image).
+    """
+
+
+class VeniceProviderContentPolicyError(VeniceAPIError):
+    """422 — the upstream model provider rejected the request on content policy.
+
+    Distinct from :class:`VeniceContentViolationError` (Venice's own safety
+    layer, keyed on ``suggested_prompt``): here a third-party provider refused
+    the generation. Detected by body shape — ``error.type ==
+    "provider_content_policy"``. Credits are typically refunded; the response
+    may recommend an alternative model.
+    """
+
+    recommended_model: str | None
+    credits_refunded: bool | None
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        error_body: dict[str, Any] | str,
+        recommended_model: str | None = None,
+        credits_refunded: bool | None = None,
+        request: httpx.Request | None = None,
+        response: httpx.Response | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            error_body=error_body,
+            request=request,
+            response=response,
+        )
+        self.recommended_model = recommended_model
+        self.credits_refunded = credits_refunded
+
+
 class VeniceNotFoundError(VeniceAPIError):
     """404 — the resource does not exist (e.g., unknown model or queue id)."""
 
@@ -209,6 +252,24 @@ def raise_for_response(response: httpx.Response) -> None:
         "response": response,
     }
 
+    # Provider content-policy rejection (422): a nested error object whose
+    # type is "provider_content_policy". Detected by shape, before the generic
+    # 422 -> VeniceValidationError mapping below.
+    if isinstance(body, dict):
+        err_obj = body.get("error")
+        if isinstance(err_obj, dict) and err_obj.get("type") == "provider_content_policy":
+            err_message = err_obj.get("message")
+            raise VeniceProviderContentPolicyError(
+                err_message if isinstance(err_message, str) and err_message else message,
+                recommended_model=err_obj.get("recommended_model")
+                if isinstance(err_obj.get("recommended_model"), str)
+                else None,
+                credits_refunded=err_obj.get("credits_refunded")
+                if isinstance(err_obj.get("credits_refunded"), bool)
+                else None,
+                **kwargs,
+            )
+
     # Content violations can come back as 400 or 422; detect by shape.
     if isinstance(body, dict) and "suggested_prompt" in body:
         suggested = body.get("suggested_prompt")
@@ -247,6 +308,8 @@ def raise_for_response(response: httpx.Response) -> None:
         exc_cls = VeniceNotFoundError
     elif status in (400, 422):
         exc_cls = VeniceValidationError
+    elif status == 413:
+        exc_cls = VenicePayloadTooLargeError
     elif status == 429:
         exc_cls = VeniceRateLimitError
     elif 500 <= status < 600:
@@ -280,6 +343,8 @@ __all__ = [
     "VeniceError",
     "VeniceInsufficientBalanceError",
     "VeniceNotFoundError",
+    "VenicePayloadTooLargeError",
+    "VeniceProviderContentPolicyError",
     "VeniceRateLimitError",
     "VeniceServerError",
     "VeniceTimeoutError",
