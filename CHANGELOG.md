@@ -3,6 +3,19 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.1] — 2026-06-18
+
+### Packaging
+
+- First release published to **public PyPI** as `veniceresch` — downstream
+  projects can now depend on a version range (e.g. `veniceresch>=0.5,<1.0`)
+  instead of a pinned git commit. No code or API changes from 0.5.0.
+- Added `.github/workflows/release.yml`: on every `vX.Y.Z` tag it verifies
+  the tag matches `project.version`, builds the sdist + wheel, runs
+  `twine check`, and publishes via PyPI Trusted Publishing (OIDC) — no API
+  token stored in the repo.
+- Added `build` + `twine` to the `dev` extra for local release dry-runs.
+
 ## [0.5.0] — 2026-06-17
 
 ### Added
