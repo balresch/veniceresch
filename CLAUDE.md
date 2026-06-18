@@ -57,6 +57,13 @@ Generated response types used directly by resources (`BillingBalanceResponse`, `
 - Integration smoke (hits real API): `VENICE_API_KEY=... pytest tests/integration -m integration`
 - Single test: `pytest tests/test_chat.py::test_name`
 - Install in editable mode: `pip install -e ".[dev]"`
+- Build dists locally: `python -m build` → `python -m twine check dist/*` (mirrors what CI does).
+
+## Releasing
+
+Published to **public PyPI** as `veniceresch` via Trusted Publishing (OIDC) — no API token is stored in the repo. The `.github/workflows/release.yml` job fires on any `v[0-9]+.[0-9]+.[0-9]+` tag: it asserts the tag matches `project.version` in `pyproject.toml`, runs `python -m build` + `twine check`, then publishes through `pypa/gh-action-pypi-publish` from the `pypi` GitHub environment.
+
+To cut a release: bump `version` in `pyproject.toml`, update `CHANGELOG.md`, commit, then `git tag vX.Y.Z && git push --tags`. Breaking changes get a **major** bump so downstreams pinning `veniceresch>=0.5,<1.0` stay safe. One-time setup (account-side, can't be done from the repo): create the PyPI project / pending publisher pointing at owner `balresch`, repo `veniceresch`, workflow `release.yml`, environment `pypi`.
 
 ## Endpoint coverage
 
