@@ -11,6 +11,7 @@ plug in whatever retry policy they prefer. See ``_errors.py``.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
@@ -20,6 +21,7 @@ import httpx
 from typing_extensions import Self
 
 from veniceresch._errors import (
+    VeniceUnexpectedContentTypeError,
     raise_for_response,
     translate_httpx_error,
 )
@@ -56,6 +58,36 @@ def _has_header(headers: Mapping[str, str] | None, name: str) -> bool:
         return False
     target = name.lower()
     return any(k.lower() == target for k in headers)
+
+
+def _guard_binary_content_type(response: httpx.Response) -> None:
+    """Raise if a binary request got a JSON 2xx body instead of media bytes.
+
+    Venice's VPS-backed video models answer ``/video/retrieve`` with a JSON
+    status object even when ``Accept: video/mp4`` was sent. Without this guard
+    that JSON would be returned verbatim as ``bytes`` — a silent corruption.
+    Only an exact ``application/json`` content type trips the guard; genuine
+    media (``video/mp4``, ``image/png``, ``application/octet-stream``, …) and
+    untyped responses pass through untouched.
+    """
+    content_type = response.headers.get("content-type", "")
+    if content_type.split(";", 1)[0].strip().lower() != "application/json":
+        return
+    try:
+        parsed = response.json()
+    except (json.JSONDecodeError, ValueError):
+        parsed = response.text
+    raise VeniceUnexpectedContentTypeError(
+        "Expected binary media but Venice returned a JSON body "
+        f"(Content-Type: {content_type!r}). For VPS-backed video models the "
+        "media lives at the response's download_url; call video.download(...) "
+        "instead of retrieve_binary(...).",
+        status_code=response.status_code,
+        error_body=parsed if isinstance(parsed, dict) else str(parsed),
+        content_type=content_type,
+        request=response.request,
+        response=response,
+    )
 
 
 def _build_headers(
@@ -209,6 +241,7 @@ class AsyncVeniceClient(_BaseClient):
         headers: Mapping[str, str] | None = None,
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
+        no_auth: bool = False,
     ) -> bytes:
         response = await self._send(
             method,
@@ -219,7 +252,9 @@ class AsyncVeniceClient(_BaseClient):
             files=files,
             data=data,
             accept="application/octet-stream",
+            no_auth=no_auth,
         )
+        _guard_binary_content_type(response)
         return response.content
 
     @asynccontextmanager
@@ -417,6 +452,7 @@ class VeniceClient(_BaseClient):
         headers: Mapping[str, str] | None = None,
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
+        no_auth: bool = False,
     ) -> bytes:
         response = self._send(
             method,
@@ -427,7 +463,9 @@ class VeniceClient(_BaseClient):
             files=files,
             data=data,
             accept="application/octet-stream",
+            no_auth=no_auth,
         )
+        _guard_binary_content_type(response)
         return response.content
 
     @contextmanager

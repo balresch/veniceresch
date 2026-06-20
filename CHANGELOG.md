@@ -3,6 +3,37 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.2] — 2026-06-20
+
+### Fixed
+
+- **`video.retrieve_binary` no longer returns JSON as bogus "MP4 bytes".**
+  VPS-backed video models (the `-private` grok models) answer `/video/retrieve`
+  with a JSON status object even when `Accept: video/mp4` is sent. The binary
+  helpers previously returned that body verbatim, so a completed job yielded an
+  ~81-byte JSON blob written to disk as an unplayable `.mp4` with no error.
+  `_request_bytes` now inspects the response `Content-Type` and raises the new
+  `VeniceUnexpectedContentTypeError` when a binary request gets a JSON body
+  (the parsed JSON is on `error_body`, the offending type on `content_type`).
+  This guard protects every binary endpoint (image/audio too), not just video.
+
+### Added
+
+- **`video.download(model, queue_id)`** (sync + async) — returns the MP4 bytes
+  for a completed video for *both* model families. It calls `retrieve_binary`
+  (one request for direct-bytes models) and, when that surfaces a VPS-backed
+  JSON body, reads the `download_url` from it and GETs the media directly
+  (with auth stripped, since those URLs are presigned). Prefer it over
+  `retrieve_binary` unless you know you have a direct-bytes model.
+- `VeniceUnexpectedContentTypeError` exported from the package root.
+- `download_url` is now a declared field on `VideoRetrieveResponse`.
+
+### Internal
+
+- `_request_bytes` gained a `no_auth` passthrough (used by `download` to fetch
+  presigned CDN URLs without the Venice bearer).
+- Bumped `_version.__version__` to match `pyproject` (it had drifted to 0.5.0).
+
 ## [0.5.1] — 2026-06-18
 
 ### Packaging

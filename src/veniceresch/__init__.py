@@ -14,6 +14,7 @@ from veniceresch._errors import (
     VeniceRateLimitError,
     VeniceServerError,
     VeniceTimeoutError,
+    VeniceUnexpectedContentTypeError,
     VeniceValidationError,
     VeniceX402PaymentRequiredError,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "VeniceRateLimitError",
     "VeniceServerError",
     "VeniceTimeoutError",
+    "VeniceUnexpectedContentTypeError",
     "VeniceValidationError",
     "VeniceVideoTimeoutError",
     "VeniceX402PaymentRequiredError",

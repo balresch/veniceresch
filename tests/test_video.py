@@ -4,9 +4,19 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 
-from veniceresch import VeniceVideoTimeoutError
+from veniceresch import VeniceUnexpectedContentTypeError, VeniceVideoTimeoutError
+
+# JSON status blob a VPS-backed model returns from /video/retrieve instead of
+# MP4 bytes — the shape that bit the lewdresch/DIEMshare integration.
+_VPS_STATUS = {
+    "status": "COMPLETED",
+    "average_execution_time": 239075,
+    "execution_duration": 26097,
+    "download_url": "https://cdn.venice.ai/videos/q-123.mp4",
+}
 
 
 async def test_queue_posts_body(mock_api, async_client):
@@ -42,6 +52,47 @@ async def test_retrieve_binary(mock_api, async_client):
     result = await async_client.video.retrieve_binary(model="v1", queue_id="q-123")
     assert result == b"MP4DATA"
     assert route.calls.last.request.headers["accept"] == "video/mp4"
+
+
+async def test_retrieve_binary_raises_on_json_body(mock_api, async_client):
+    # VPS-backed models answer the Accept: video/mp4 call with a JSON status
+    # object. That must NOT be returned verbatim as "MP4 bytes".
+    mock_api.post("/video/retrieve").respond(200, json=_VPS_STATUS)
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await async_client.video.retrieve_binary(model="v1", queue_id="q-123")
+    assert info.value.content_type.startswith("application/json")
+    assert info.value.error_body["download_url"] == _VPS_STATUS["download_url"]
+
+
+async def test_download_direct_bytes_model(mock_api, async_client):
+    # Direct-bytes model: one call, MP4 bytes straight back.
+    route = mock_api.post("/video/retrieve").respond(200, content=b"MP4DATA")
+    result = await async_client.video.download(model="v1", queue_id="q-123")
+    assert result == b"MP4DATA"
+    assert route.call_count == 1
+
+
+async def test_download_vps_model_follows_download_url(mock_api, async_client):
+    mock_api.post("/video/retrieve").respond(200, json=_VPS_STATUS)
+    cdn = mock_api.get(_VPS_STATUS["download_url"]).respond(200, content=b"REALMP4")
+    result = await async_client.video.download(model="v1", queue_id="q-123")
+    assert result == b"REALMP4"
+    # The CDN URL is presigned — the Venice bearer must not be forwarded.
+    assert "authorization" not in cdn.calls.last.request.headers
+
+
+async def test_download_reraises_when_no_download_url(mock_api, async_client):
+    mock_api.post("/video/retrieve").respond(
+        200, json={"status": "COMPLETED", "execution_duration": 1}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError):
+        await async_client.video.download(model="v1", queue_id="q-123")
+
+
+def test_sync_download_vps_model(mock_api, sync_client):
+    mock_api.post("/video/retrieve").respond(200, json=_VPS_STATUS)
+    mock_api.get(_VPS_STATUS["download_url"]).respond(200, content=b"REALMP4")
+    assert sync_client.video.download(model="v1", queue_id="q-123") == b"REALMP4"
 
 
 async def test_quote(mock_api, async_client):
@@ -80,8 +131,6 @@ async def test_transcribe(mock_api, async_client):
 
 
 async def test_wait_returns_on_completed(async_client, mock_api):
-    import httpx
-
     request_list = []
 
     def handler(request):
@@ -104,8 +153,6 @@ async def test_wait_returns_on_completed(async_client, mock_api):
 
 
 async def test_wait_raises_on_timeout(async_client, mock_api):
-    import httpx
-
     def handler(request):
         return httpx.Response(
             200,

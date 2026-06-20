@@ -227,15 +227,17 @@ class VideoRetrieveResponse(VeniceBaseModel):
     """Response from ``POST /video/retrieve`` (JSON form).
 
     For the binary form (MP4 bytes), use
-    :meth:`~veniceresch.resources.video.AsyncVideoResource.retrieve_binary`.
-    ``status`` is ``"PROCESSING"`` until the job finishes. Completion
-    responses carry additional fields (e.g. ``download_url``) that land
-    on ``.model_extra``.
+    :meth:`~veniceresch.resources.video.AsyncVideoResource.download` (which
+    works for both VPS-backed and direct-bytes models). ``status`` is
+    ``"PROCESSING"`` until the job finishes. VPS-backed models populate
+    ``download_url`` on completion; any other completion fields land on
+    ``.model_extra``.
     """
 
     status: str | None = None
     average_execution_time: float | None = None
     execution_duration: float | None = None
+    download_url: str | None = None
 
 
 class VideoQuoteResponse(VeniceBaseModel):

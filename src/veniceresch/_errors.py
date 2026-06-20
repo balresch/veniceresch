@@ -175,6 +175,47 @@ class VeniceServerError(VeniceAPIError):
     """5xx — Venice had an internal error."""
 
 
+class VeniceUnexpectedContentTypeError(VeniceAPIError):
+    """A binary request got a 2xx response whose body is JSON, not media bytes.
+
+    Raised by the binary helpers (e.g.
+    :meth:`~veniceresch.resources.video.AsyncVideoResource.retrieve_binary`)
+    when Venice answers a ``Accept: <media>`` request with
+    ``Content-Type: application/json``. Venice's VPS-backed video models do
+    exactly this on ``/video/retrieve``: they return the JSON status object
+    (carrying ``download_url``) even though MP4 bytes were requested. Returning
+    that JSON verbatim as ``bytes`` would silently corrupt the caller's output
+    (an 81-byte "video"), so the SDK raises this instead.
+
+    The parsed JSON body is on :attr:`error_body`; the offending value is on
+    :attr:`content_type`. For video, fetch the real media from the body's
+    ``download_url`` — or just call
+    :meth:`~veniceresch.resources.video.AsyncVideoResource.download`, which
+    handles both VPS-backed and direct-bytes models.
+    """
+
+    content_type: str | None
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        error_body: dict[str, Any] | str,
+        content_type: str | None = None,
+        request: httpx.Request | None = None,
+        response: httpx.Response | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            error_body=error_body,
+            request=request,
+            response=response,
+        )
+        self.content_type = content_type
+
+
 class VeniceContentViolationError(VeniceAPIError):
     """Response matched Venice's ContentViolationError schema.
 
@@ -348,6 +389,7 @@ __all__ = [
     "VeniceRateLimitError",
     "VeniceServerError",
     "VeniceTimeoutError",
+    "VeniceUnexpectedContentTypeError",
     "VeniceValidationError",
     "VeniceX402PaymentRequiredError",
     "raise_for_response",
