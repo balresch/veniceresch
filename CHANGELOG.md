@@ -3,6 +3,27 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.3] — 2026-06-21
+
+### Added
+
+- **`video.download(model, queue_id, download_url=...)`** (sync + async) — new
+  optional `download_url` parameter. VPS-backed `-private` models do not expose
+  the media URL on `/video/retrieve` at all; the only handle is the
+  `download_url` on the `video.queue()` submit response
+  (`VideoQueueResponse.download_url`). Passing it makes `download()` fetch the
+  media directly (presigned URL, auth stripped) and skip `/video/retrieve`
+  entirely, so `download()` now cleanly covers every model family without
+  callers reaching into the private `_request_bytes`. (#8)
+
+### Fixed
+
+- **Corrected the `VideoRetrieveResponse` docstring** (and the `video` module /
+  `retrieve_binary` docstrings) which wrongly claimed VPS-backed models populate
+  `download_url` on `/video/retrieve` completion. They do not — that endpoint is
+  status-polling only; the media URL lives on the `video.queue()` submit
+  response. (#7)
+
 ## [0.5.2] — 2026-06-20
 
 ### Fixed

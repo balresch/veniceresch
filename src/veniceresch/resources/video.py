@@ -9,11 +9,14 @@ Venice's video API is queue-based:
 The two model families return the media differently: direct-bytes models hand
 back MP4 bytes from ``/video/retrieve`` (what :meth:`retrieve_binary` reads),
 while VPS-backed models (the ``-private`` grok models) ignore ``Accept:
-video/mp4`` and answer with the JSON status object, putting the media at
-``download_url``. :meth:`retrieve_binary` raises
-:class:`~veniceresch._errors.VeniceUnexpectedContentTypeError` for the latter
-rather than returning the JSON as bogus "bytes"; :meth:`download` handles both
-families, so prefer it unless you know you have a direct-bytes model.
+video/mp4`` and answer with a JSON status object. For those models the media
+URL is *not* on the retrieve body — it is the ``download_url`` returned on the
+``video.queue()`` submit response (:attr:`~veniceresch.types.VideoQueueResponse.download_url`);
+``/video/retrieve`` is for status polling only. :meth:`retrieve_binary` raises
+:class:`~veniceresch._errors.VeniceUnexpectedContentTypeError` rather than
+returning that JSON as bogus "bytes". :meth:`download` handles both families:
+pass the queue submit's ``download_url`` for VPS-backed models, or let it fall
+back to ``retrieve_binary`` for direct-bytes models.
 
 :meth:`wait_for_completion` wraps the polling loop (step 2) and is the only
 method in this SDK that does more than "POST and parse."
@@ -118,8 +121,9 @@ class AsyncVideoResource:
         Works for direct-bytes models. VPS-backed models answer this call with
         a JSON status object instead of MP4 bytes, so this raises
         :class:`~veniceresch._errors.VeniceUnexpectedContentTypeError` for them
-        (the JSON, carrying ``download_url``, is on the error's ``error_body``).
-        Prefer :meth:`download`, which handles both families.
+        (the parsed JSON status body is on the error's ``error_body``; it does
+        not carry the media URL — that is on the ``video.queue()`` submit
+        response). Prefer :meth:`download`, which handles both families.
         """
         body = _drop_none(
             {
@@ -135,22 +139,36 @@ class AsyncVideoResource:
             headers={"Accept": "video/mp4"},
         )
 
-    async def download(self, *, model: str, queue_id: str) -> bytes:
+    async def download(
+        self,
+        *,
+        model: str,
+        queue_id: str,
+        download_url: str | None = None,
+    ) -> bytes:
         """Return the MP4 bytes for a completed video, for any model family.
 
-        Tries :meth:`retrieve_binary` first (one call for direct-bytes models).
-        If Venice answers with JSON instead — VPS-backed models — the media's
-        ``download_url`` is read from that JSON and fetched directly. Raises
-        :class:`~veniceresch._errors.VeniceUnexpectedContentTypeError` only if
-        the JSON carries no usable ``download_url``.
+        If ``download_url`` is given — the value from the ``video.queue()``
+        submit response (:attr:`~veniceresch.types.VideoQueueResponse.download_url`),
+        which is the only handle to the media for VPS-backed ``-private`` models
+        — the media is fetched directly from it (presigned URL, auth stripped).
+
+        Otherwise tries :meth:`retrieve_binary` first (one call for direct-bytes
+        models). If Venice answers with JSON instead, any ``download_url`` in
+        that body is fetched directly; otherwise
+        :class:`~veniceresch._errors.VeniceUnexpectedContentTypeError` is raised
+        (VPS-backed models do not carry the URL on ``/video/retrieve`` — capture
+        it from ``queue()`` and pass it here).
         """
+        if download_url is not None:
+            return await self._client._request_bytes("GET", download_url, no_auth=True)
         try:
             return await self.retrieve_binary(model=model, queue_id=queue_id)
         except VeniceUnexpectedContentTypeError as exc:
-            download_url = _download_url_from(exc)
-            if download_url is None:
+            url = _download_url_from(exc)
+            if url is None:
                 raise
-            return await self._client._request_bytes("GET", download_url, no_auth=True)
+            return await self._client._request_bytes("GET", url, no_auth=True)
 
     async def quote(
         self,
@@ -273,18 +291,26 @@ class VideoResource:
             headers={"Accept": "video/mp4"},
         )
 
-    def download(self, *, model: str, queue_id: str) -> bytes:
+    def download(
+        self,
+        *,
+        model: str,
+        queue_id: str,
+        download_url: str | None = None,
+    ) -> bytes:
         """Return the MP4 bytes for a completed video, for any model family.
 
         Sync mirror of :meth:`AsyncVideoResource.download`.
         """
+        if download_url is not None:
+            return self._client._request_bytes("GET", download_url, no_auth=True)
         try:
             return self.retrieve_binary(model=model, queue_id=queue_id)
         except VeniceUnexpectedContentTypeError as exc:
-            download_url = _download_url_from(exc)
-            if download_url is None:
+            url = _download_url_from(exc)
+            if url is None:
                 raise
-            return self._client._request_bytes("GET", download_url, no_auth=True)
+            return self._client._request_bytes("GET", url, no_auth=True)
 
     def quote(
         self,

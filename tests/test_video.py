@@ -81,6 +81,30 @@ async def test_download_vps_model_follows_download_url(mock_api, async_client):
     assert "authorization" not in cdn.calls.last.request.headers
 
 
+async def test_download_explicit_url_skips_retrieve(mock_api, async_client):
+    # VPS-backed models: the only handle to the media is the queue submit's
+    # download_url. Passing it fetches directly, never touching /video/retrieve.
+    retrieve = mock_api.post("/video/retrieve")
+    cdn = mock_api.get(_VPS_STATUS["download_url"]).respond(200, content=b"REALMP4")
+    result = await async_client.video.download(
+        model="v1", queue_id="q-123", download_url=_VPS_STATUS["download_url"]
+    )
+    assert result == b"REALMP4"
+    assert retrieve.call_count == 0
+    # Presigned URL — the Venice bearer must not be forwarded.
+    assert "authorization" not in cdn.calls.last.request.headers
+
+
+def test_sync_download_explicit_url_skips_retrieve(mock_api, sync_client):
+    retrieve = mock_api.post("/video/retrieve")
+    mock_api.get(_VPS_STATUS["download_url"]).respond(200, content=b"REALMP4")
+    result = sync_client.video.download(
+        model="v1", queue_id="q-123", download_url=_VPS_STATUS["download_url"]
+    )
+    assert result == b"REALMP4"
+    assert retrieve.call_count == 0
+
+
 async def test_download_reraises_when_no_download_url(mock_api, async_client):
     mock_api.post("/video/retrieve").respond(
         200, json={"status": "COMPLETED", "execution_duration": 1}

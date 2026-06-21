@@ -229,9 +229,15 @@ class VideoRetrieveResponse(VeniceBaseModel):
     For the binary form (MP4 bytes), use
     :meth:`~veniceresch.resources.video.AsyncVideoResource.download` (which
     works for both VPS-backed and direct-bytes models). ``status`` is
-    ``"PROCESSING"`` until the job finishes. VPS-backed models populate
-    ``download_url`` on completion; any other completion fields land on
-    ``.model_extra``.
+    ``"PROCESSING"`` until the job finishes; ``/video/retrieve`` is for status
+    polling only.
+
+    ``download_url`` is **not** populated here for VPS-backed models — their
+    completed retrieve body carries only status fields. For those models the
+    media URL is on the ``video.queue()`` submit response
+    (:attr:`VideoQueueResponse.download_url`). The field is declared (and
+    tolerated) here only for direct-bytes models that happen to echo it back;
+    any other completion fields land on ``.model_extra``.
     """
 
     status: str | None = None
