@@ -3,6 +3,18 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.4] — 2026-06-21
+
+### Fixed
+
+- **`__version__` and the `User-Agent` header now report the real version.**
+  The version was duplicated in `pyproject.toml` and a hand-bumped
+  `src/veniceresch/_version.py`; the latter was missed in the 0.5.3 release, so
+  installs of 0.5.3 reported `veniceresch.__version__ == "0.5.2"` and sent
+  `User-Agent: veniceresch-python/0.5.2`. `_version.py` now derives the version
+  from the installed package metadata (`importlib.metadata`), making
+  `pyproject.toml` the single source of truth so it can't drift again.
+
 ## [0.5.3] — 2026-06-21
 
 ### Added
