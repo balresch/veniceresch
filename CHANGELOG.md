@@ -5,6 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in failure raising for `wait_for_completion`.** `video.wait_for_completion`
+  and `audio.wait_for_completion` (async and sync) gained a
+  `raise_on_failed: bool = False` parameter. The default is unchanged — the
+  helper still returns the final retrieve response for *any* non-PROCESSING
+  status, preserving tolerance of undocumented terminal statuses. With
+  `raise_on_failed=True` a known failure status (case-insensitive `FAILED` /
+  `CANCELLED` / `CANCELED` / `ERROR`) instead raises the new
+  `VeniceVideoFailedError` / `VeniceAudioFailedError` (the final response is on
+  the error's `.result`); success and any other unknown-but-non-PROCESSING
+  status still return normally. The two new error classes are exported from the
+  package root. Venice does not document failure status strings for the
+  queue/retrieve endpoints, so the failure set is curated rather than derived
+  from a success allow-list, keeping unknown terminal statuses non-fatal.
+
 ### Fixed
 
 - **Binary endpoints now reject *all* unexpected textual 2xx bodies, not just

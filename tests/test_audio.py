@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 
-from veniceresch import VeniceAudioTimeoutError
+from veniceresch import VeniceAudioFailedError, VeniceAudioTimeoutError
 
 
 async def test_create_speech_returns_bytes(mock_api, async_client):
@@ -141,6 +141,53 @@ async def test_audio_wait_raises_on_timeout(mock_api, async_client):
             queue_id="q",
             timeout_s=0.05,
             poll_interval_s=0.01,
+        )
+
+
+async def test_audio_wait_returns_failed_status_by_default(mock_api, async_client):
+    mock_api.post("/audio/retrieve").respond(200, json={"status": "FAILED"})
+    result = await async_client.audio.wait_for_completion(
+        model="a", queue_id="q", timeout_s=5.0, poll_interval_s=0.01
+    )
+    assert result.status == "FAILED"
+
+
+async def test_audio_wait_raises_on_failed_when_opted_in(mock_api, async_client):
+    mock_api.post("/audio/retrieve").respond(200, json={"status": "ERROR"})
+    with pytest.raises(VeniceAudioFailedError) as info:
+        await async_client.audio.wait_for_completion(
+            model="a",
+            queue_id="q",
+            timeout_s=5.0,
+            poll_interval_s=0.01,
+            raise_on_failed=True,
+        )
+    assert info.value.queue_id == "q"
+    assert info.value.status == "ERROR"
+    assert info.value.result.status == "ERROR"
+
+
+async def test_audio_wait_unknown_terminal_status_still_returns(mock_api, async_client):
+    mock_api.post("/audio/retrieve").respond(200, json={"status": "DONE"})
+    result = await async_client.audio.wait_for_completion(
+        model="a",
+        queue_id="q",
+        timeout_s=5.0,
+        poll_interval_s=0.01,
+        raise_on_failed=True,
+    )
+    assert result.status == "DONE"
+
+
+def test_sync_audio_wait_raises_on_failed_when_opted_in(mock_api, sync_client):
+    mock_api.post("/audio/retrieve").respond(200, json={"status": "canceled"})
+    with pytest.raises(VeniceAudioFailedError):
+        sync_client.audio.wait_for_completion(
+            model="a",
+            queue_id="q",
+            timeout_s=5.0,
+            poll_interval_s=0.01,
+            raise_on_failed=True,
         )
 
 

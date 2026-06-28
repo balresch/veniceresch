@@ -30,6 +30,12 @@ AudioInput = bytes | str | Path
 _STATUS_PROCESSING = "PROCESSING"
 _DEFAULT_TIMEOUT_S = 300.0
 _DEFAULT_POLL_S = 2.0
+# Venice does not document failure status strings for /audio/retrieve (the
+# swagger enum lists PROCESSING only). This curated, case-insensitive set is
+# what ``wait_for_completion(raise_on_failed=True)`` treats as failure; any
+# other non-PROCESSING status (including unknown ones) still returns normally,
+# preserving the "tolerate unknown terminal statuses" contract.
+_FAILURE_STATUSES = frozenset({"FAILED", "CANCELLED", "CANCELED", "ERROR"})
 
 
 class VeniceAudioTimeoutError(VeniceAPIError):
@@ -43,6 +49,24 @@ class VeniceAudioTimeoutError(VeniceAPIError):
         )
         self.queue_id = queue_id
         self.timeout_s = timeout_s
+
+
+class VeniceAudioFailedError(VeniceAPIError):
+    """Raised by :meth:`wait_for_completion` with ``raise_on_failed=True`` when
+    the job reaches a known failure terminal state (see ``_FAILURE_STATUSES``).
+
+    The final retrieve response is on :attr:`result` for inspection.
+    """
+
+    def __init__(self, queue_id: str, status: str, result: AudioRetrieveResponse) -> None:
+        super().__init__(
+            f"Audio queue_id={queue_id!r} ended in failure status {status!r}",
+            status_code=0,
+            error_body={"queue_id": queue_id, "status": status},
+        )
+        self.queue_id = queue_id
+        self.status = status
+        self.result = result
 
 
 def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
@@ -194,11 +218,31 @@ class AsyncAudioResource:
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,
+        raise_on_failed: bool = False,
     ) -> AudioRetrieveResponse:
+        """Poll ``/audio/retrieve`` until the job reaches a *terminal* state.
+
+        Waits for a terminal state, not necessarily a *successful* one: by
+        default it returns the final retrieve response for any non-PROCESSING
+        status, preserving tolerance of undocumented terminal statuses. Raises
+        :class:`VeniceAudioTimeoutError` if ``timeout_s`` elapses first.
+
+        Pass ``raise_on_failed=True`` to instead raise
+        :class:`VeniceAudioFailedError` on a known failure status
+        (case-insensitive ``FAILED`` / ``CANCELLED`` / ``CANCELED`` / ``ERROR``);
+        success and any other unknown-but-non-PROCESSING status still return
+        normally.
+        """
         deadline = time.monotonic() + timeout_s
         while True:
             result = await self.retrieve(model=model, queue_id=queue_id)
             if result.status != _STATUS_PROCESSING:
+                if (
+                    raise_on_failed
+                    and isinstance(result.status, str)
+                    and result.status.upper() in _FAILURE_STATUSES
+                ):
+                    raise VeniceAudioFailedError(queue_id, result.status, result)
                 return result
             if time.monotonic() >= deadline:
                 raise VeniceAudioTimeoutError(queue_id, timeout_s)
@@ -325,11 +369,19 @@ class AudioResource:
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,
+        raise_on_failed: bool = False,
     ) -> AudioRetrieveResponse:
+        """Sync mirror of :meth:`AsyncAudioResource.wait_for_completion`."""
         deadline = time.monotonic() + timeout_s
         while True:
             result = self.retrieve(model=model, queue_id=queue_id)
             if result.status != _STATUS_PROCESSING:
+                if (
+                    raise_on_failed
+                    and isinstance(result.status, str)
+                    and result.status.upper() in _FAILURE_STATUSES
+                ):
+                    raise VeniceAudioFailedError(queue_id, result.status, result)
                 return result
             if time.monotonic() >= deadline:
                 raise VeniceAudioTimeoutError(queue_id, timeout_s)
@@ -339,5 +391,6 @@ class AudioResource:
 __all__ = [
     "AsyncAudioResource",
     "AudioResource",
+    "VeniceAudioFailedError",
     "VeniceAudioTimeoutError",
 ]

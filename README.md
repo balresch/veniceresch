@@ -166,6 +166,13 @@ print(result.status)  # "COMPLETED"
 mp4 = await client.video.retrieve_binary(model="video-v1", queue_id=queued.queue_id)
 ```
 
+`wait_for_completion` waits for a *terminal* state, not necessarily a
+*successful* one: by default it returns the final response for any
+non-PROCESSING status (so unknown terminal statuses are tolerated). Pass
+`raise_on_failed=True` to instead raise `VeniceVideoFailedError` /
+`VeniceAudioFailedError` on a known failure status (`FAILED`, `CANCELLED`,
+`ERROR`); the final response is on the error's `.result`.
+
 Queue / retrieve / quote / complete / transcribe all return typed
 Pydantic models (`VideoQueueResponse`, `VideoRetrieveResponse`, etc.).
 Attribute access everywhere — ``queued.queue_id`` and

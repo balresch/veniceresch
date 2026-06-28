@@ -127,7 +127,7 @@ payload; no behavior change for current single-line Venice chunks.
 
 ---
 
-## 3. Opt-in failure raising for `wait_for_completion`  (review #6)  — TODO
+## 3. Opt-in failure raising for `wait_for_completion`  (review #6)  — DONE
 
 **Problem.** `wait_for_completion` returns as soon as status is not
 `"PROCESSING"`:

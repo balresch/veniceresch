@@ -7,7 +7,11 @@ import json
 import httpx
 import pytest
 
-from veniceresch import VeniceUnexpectedContentTypeError, VeniceVideoTimeoutError
+from veniceresch import (
+    VeniceUnexpectedContentTypeError,
+    VeniceVideoFailedError,
+    VeniceVideoTimeoutError,
+)
 
 # JSON status blob a VPS-backed model returns from /video/retrieve instead of
 # MP4 bytes — the shape that bit the lewdresch/DIEMshare integration.
@@ -236,6 +240,67 @@ async def test_wait_raises_on_timeout(async_client, mock_api):
             poll_interval_s=0.01,
         )
     assert info.value.queue_id == "q-timeout"
+
+
+async def test_wait_returns_failed_status_by_default(async_client, mock_api):
+    # Default behavior is unchanged: a non-PROCESSING failure status is returned
+    # as-is rather than raising, preserving the "tolerate terminal statuses"
+    # contract.
+    mock_api.post("/video/retrieve").respond(200, json={"status": "FAILED"})
+    result = await async_client.video.wait_for_completion(
+        model="v1", queue_id="q-failed", timeout_s=5.0, poll_interval_s=0.01
+    )
+    assert result.status == "FAILED"
+
+
+async def test_wait_raises_on_failed_when_opted_in(async_client, mock_api):
+    mock_api.post("/video/retrieve").respond(200, json={"status": "failed"})
+    with pytest.raises(VeniceVideoFailedError) as info:
+        await async_client.video.wait_for_completion(
+            model="v1",
+            queue_id="q-failed",
+            timeout_s=5.0,
+            poll_interval_s=0.01,
+            raise_on_failed=True,
+        )
+    # Failure matching is case-insensitive; the original status string is kept.
+    assert info.value.queue_id == "q-failed"
+    assert info.value.status == "failed"
+    assert info.value.result.status == "failed"
+
+
+async def test_wait_unknown_terminal_status_still_returns_when_opted_in(async_client, mock_api):
+    # raise_on_failed only fires on the curated failure set; an unknown
+    # non-PROCESSING status must still return normally.
+    mock_api.post("/video/retrieve").respond(200, json={"status": "WEIRD"})
+    result = await async_client.video.wait_for_completion(
+        model="v1",
+        queue_id="q-weird",
+        timeout_s=5.0,
+        poll_interval_s=0.01,
+        raise_on_failed=True,
+    )
+    assert result.status == "WEIRD"
+
+
+def test_sync_wait_raises_on_failed_when_opted_in(sync_client, mock_api):
+    mock_api.post("/video/retrieve").respond(200, json={"status": "CANCELLED"})
+    with pytest.raises(VeniceVideoFailedError):
+        sync_client.video.wait_for_completion(
+            model="v1",
+            queue_id="q-cancelled",
+            timeout_s=5.0,
+            poll_interval_s=0.01,
+            raise_on_failed=True,
+        )
+
+
+def test_sync_wait_returns_failed_status_by_default(sync_client, mock_api):
+    mock_api.post("/video/retrieve").respond(200, json={"status": "FAILED"})
+    result = sync_client.video.wait_for_completion(
+        model="v1", queue_id="q-failed", timeout_s=5.0, poll_interval_s=0.01
+    )
+    assert result.status == "FAILED"
 
 
 def test_sync_video_queue(mock_api, sync_client):
