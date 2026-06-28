@@ -187,7 +187,7 @@ failure terminal states; contract documented.
 
 ---
 
-## 4. Add a coverage floor + (optional) live smoke workflow  (review #7)  — TODO
+## 4. Add a coverage floor + (optional) live smoke workflow  (review #7)  — DONE
 
 **Problem.** Coverage sits at 88% but nothing enforces it; a regression could
 silently drop it. No live smoke check guards against upstream Venice drift.
