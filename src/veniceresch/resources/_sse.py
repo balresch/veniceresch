@@ -37,9 +37,17 @@ def _extract_events(buffer: str) -> tuple[list[str], str]:
 def _parse_event(raw: str) -> Any | None:
     """Turn an SSE event block into a decoded JSON payload, or None to skip.
 
-    Returns ``None`` for non-data lines, comments (``:``), and ``[DONE]``.
-    Raising this sentinel lets the caller stop iteration cleanly.
+    Returns ``None`` for events with no ``data:`` lines (comments ``:``,
+    ``id:``/``event:``/``retry:`` only). Raising ``_StreamDone`` lets the caller
+    stop iteration cleanly when a ``data:`` line carries ``[DONE]``.
+
+    Per the SSE spec, a single event may contain multiple ``data:`` lines whose
+    payloads are joined with ``\\n`` before decoding, so we accumulate every
+    ``data:`` line in the block and ``json.loads`` the joined result once. We
+    deliberately discard ``event:`` names — Venice's chat and ``/responses``
+    streams don't use them semantically today; revisit only if that changes.
     """
+    payloads: list[str] = []
     for line in raw.splitlines():
         line = line.strip()
         if not line or line.startswith(":"):
@@ -50,8 +58,10 @@ def _parse_event(raw: str) -> Any | None:
         payload = line[len("data:") :].strip()
         if payload == _DONE_SENTINEL:
             raise _StreamDone
-        return json.loads(payload)
-    return None
+        payloads.append(payload)
+    if not payloads:
+        return None
+    return json.loads("\n".join(payloads))
 
 
 class _StreamDone(Exception):

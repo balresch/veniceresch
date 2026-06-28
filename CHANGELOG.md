@@ -18,6 +18,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   unchanged. Endpoints that legitimately return text (`augment.parse_text`,
   which expects `text/plain`) opt in via a new internal `allowed_content_types`
   allow-list. Covers both async and sync paths.
+- **SSE parser now joins multi-line `data:` events before decoding.** Per the
+  SSE spec a single event may carry multiple `data:` lines that must be joined
+  with `\n` and decoded once; `_parse_event` previously returned on the *first*
+  `data:` line, so a spec-compliant multi-`data:` event would decode only its
+  first fragment (and typically raise `json.JSONDecodeError` mid-stream on the
+  partial JSON). It now accumulates every `data:` line in the block, joins with
+  `\n`, and `json.loads` once. A `data:` line equal to `[DONE]` stops iteration
+  regardless of position. No behavior change for Venice's current single-line
+  chunks. Covers both async and sync paths.
 
 ## [0.5.4] — 2026-06-21
 

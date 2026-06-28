@@ -71,7 +71,7 @@ and untyped bodies are unchanged; both async and sync paths covered.
 
 ---
 
-## 2. Fix multi-line `data:` joining in the SSE parser  (review #1, descoped)  — TODO
+## 2. Fix multi-line `data:` joining in the SSE parser  (review #1, descoped)  — DONE
 
 **Note on scope.** The review framed this as a broad parser-hardening effort and
 listed many "missing" cases. Fact-check: the parser in
@@ -150,10 +150,33 @@ unknown-but-non-PROCESSING statuses. Apply symmetrically to audio + video,
 async + sync (4 methods). Update docstrings to state the exact contract: "waits
 for a *terminal* state, not necessarily a *successful* one."
 
-**Open question to resolve first:** what are Venice's documented failure status
-strings? Check `vendor/venice-swagger.yaml` and the live API. If undocumented,
-match defensively (status not in {`PROCESSING`, `COMPLETED`/`SUCCESS`}) behind
-the opt-in flag only.
+**Open question — RESOLVED (2026-06-28, from `vendor/venice-swagger.yaml`).**
+Venice does **not** document any failure status strings for the queue/retrieve
+polling endpoints. The swagger status enums are:
+- `/video/retrieve`: `PROCESSING`, `COMPLETED` (no `FAILED`/`CANCELLED`/`ERROR`).
+- `/video/queue`: `QUEUED`.
+- `/audio/retrieve`: `PROCESSING` only (not even `COMPLETED` is listed).
+
+Note the casing: the resources compare against the literal uppercase
+`_STATUS_PROCESSING = "PROCESSING"` (`video.py:44`, `audio.py:30`); video's
+docstring/comments reference `"COMPLETED"`. (Contrast the *`/responses`* API
+status enum at swagger ~2389 — `completed`/`failed`/`in_progress`/`cancelled`,
+lowercase — which is a **different** endpoint and not relevant here.)
+
+**Implication for the implementation.** Because failure strings are
+undocumented, do **not** hardcode a brittle exact-match success set that would
+raise on a future unknown-but-successful status. Recommended approach: when
+`raise_on_failed=True`, raise only on a curated, case-insensitive **failure**
+set (`{"FAILED", "CANCELLED", "CANCELED", "ERROR"}`); any other non-PROCESSING
+status (including unknown ones) still returns normally, preserving the
+deliberate "tolerate unknown terminal statuses" contract. This keeps the
+defensive default while making the genuinely-failed cases loud. Add new typed
+errors `VeniceVideoFailedError` / `VeniceAudioFailedError` next to the existing
+timeout errors — which live in the **resource modules**, not `_errors.py`:
+`VeniceVideoTimeoutError` at `video.py:49` and `VeniceAudioTimeoutError` at
+`audio.py:35` (both subclass `VeniceAPIError`). Mirror their definition + the
+module `__all__` entry, and re-export the two new classes from `__init__.py`
+(see the existing timeout re-exports at `__init__.py:23-24,31,46`).
 
 **Tests:** with `raise_on_failed=True`, a `FAILED` status raises; default
 (`False`) returns the failed-status response unchanged; success path unchanged;
