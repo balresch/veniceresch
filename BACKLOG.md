@@ -256,7 +256,27 @@ behavior documented.
 
 ---
 
-## 6. Parity tests for sync mirrors  (review #2)  — TODO
+## 6. Parity tests for sync mirrors  (review #2)  — DONE
+
+**Done (2026-06-28).** Added `tests/test_sync_async_parity.py`: for each
+non-trivial method it runs the *same* inputs through the async and sync surfaces
+against the *same* respx mock and asserts the two outgoing requests are
+byte-identical (URL, headers, body), normalizing only the per-request multipart
+boundary. Covered: `image.multi_edit` (`model_id`→`modelId`),
+`image.generate`/`generate_binary` (`return_binary` drop/force),
+`audio.create_cloned_voice` (multipart + bearer **and** `siwx_header`/`no_auth`),
+`audio.transcribe` (extras stringified), `audio.retrieve_binary` (Accept
+override), `chat.create`/`chat.stream` (`venice_parameters` + promoted-kwarg
+merge + `stream`/Accept), `x402.balance` (legacy `X-Sign-In-With-X` + `no_auth`),
+`x402.top_up` (`X-402-Payment`), `crypto.rpc` (batch body + `SIGN-IN-WITH-X` +
+`Idempotency-Key` + `no_auth`), `api_keys.create` (camelCase translation),
+`api_keys.generate_web3_key` (`no_auth` + camelCase). Verified the harness
+catches real drift by temporarily reverting the sync `modelId` translation (the
+test failed) before restoring. No production code changed; purely additive test
+infra, so no CHANGELOG entry (same as item #4). Trivial post-and-parse methods
+are intentionally left uncovered.
+
+**Original scope notes (kept for traceability):**
 
 **Note on scope.** Sync/async duplication is a **deliberate** design choice
 (CLAUDE.md: "Two distinct layers; they must stay distinct" / line-for-line
