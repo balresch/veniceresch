@@ -316,7 +316,24 @@ identical wire requests.
 
 ---
 
-## 7. Document & test the deliberate `model_construct` sites  (review #4, descoped)  — TODO
+## 7. Document & test the deliberate `model_construct` sites  (review #4, descoped)  — DONE
+
+**Done (2026-06-28).** Added why-comments at the augment and responses
+`model_construct` sites (`augment.py` scrape/search async+sync; `responses.py`
+create async+sync) explaining *why* validation is bypassed for that endpoint
+(Venice drops/renames schema-required fields; large fast-moving enum/polymorphic
+schema) and pointing at CLAUDE.md "Response-model strategy". Billing
+(`billing.py:23`) and `ModelList.parsed_data` (`types.py:128`) were already
+commented, so left unchanged. Added focused drift tests: `test_augment.py`
+(`scrape` tolerates a body missing required `format`; `search` tolerates a
+nested result missing required `date`, kept as a raw dict) and
+`test_responses.py` (`create` tolerates an unknown `status` enum value plus a
+missing required `created_at`). Each test first asserts `model_validate` raises
+`ValidationError` on the same raw body — so it fails loudly if the schema ever
+stops requiring those fields — then asserts the resource call round-trips the
+present fields. No production behavior changed; purely comments + additive
+tests, so no CHANGELOG entry (same as items #4 and #6). 265 tests pass; ruff +
+mypy clean.
 
 **Note on scope.** The review claimed this isn't a conscious choice and named
 `models.py` as a culprit. Fact-check: this is **wrong**. `models.py` uses

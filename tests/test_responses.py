@@ -154,3 +154,32 @@ def test_sync_create_stream_true(mock_api, sync_client):
     )
     events = list(sync_client.responses.create(model="m", input="hi", stream=True))
     assert [e.id for e in events] == ["s2"]
+
+
+# ---- model_construct drift tolerance --------------------------------------
+# create() builds ResponsesResponse with model_construct, not model_validate
+# (see the why-comment in responses.py). This pins the drift it tolerates: an
+# unknown ``status`` enum value plus a missing required ``created_at`` would be
+# rejected by model_validate, but model_construct round-trips the body.
+
+
+async def test_create_tolerates_unknown_status_and_missing_field(mock_api, async_client):
+    from pydantic import ValidationError
+
+    from veniceresch.types import ResponsesResponse
+
+    raw = {
+        "id": "resp-1",
+        "object": "response",
+        "model": "m",
+        "status": "partially_done",  # not in the generated status enum
+        "output": [],
+        # note: no ``created_at`` (schema-required)
+    }
+    with pytest.raises(ValidationError):
+        ResponsesResponse.model_validate(raw)
+
+    mock_api.post("/responses").respond(200, json=raw)
+    result = await async_client.responses.create(model="m", input="hi")
+    assert result.id == "resp-1"
+    assert result.status == "partially_done"

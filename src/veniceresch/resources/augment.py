@@ -38,6 +38,11 @@ class AsyncAugmentResource:
     async def scrape(self, *, url: str, **extra: Any) -> WebScrapeResponse:
         body = _drop_none({"url": url, **extra})
         raw = await self._client._request_json("POST", "/augment/scrape", json_body=body)
+        # model_construct, not model_validate: Venice has shipped scrape bodies
+        # that omit/rename schema-required fields (e.g. ``format``). Bypassing
+        # validation keeps drift from raising; unknown fields land on
+        # ``model_extra`` via ``extra="allow"``. See CLAUDE.md "Response-model
+        # strategy".
         return WebScrapeResponse.model_construct(**raw)
 
     async def search(
@@ -57,6 +62,9 @@ class AsyncAugmentResource:
             }
         )
         raw = await self._client._request_json("POST", "/augment/search", json_body=body)
+        # model_construct, not model_validate: tolerate Venice dropping/renaming
+        # schema-required fields and keep nested ``results`` as raw dicts (no
+        # recursive validation). See CLAUDE.md "Response-model strategy".
         return WebSearchResponse.model_construct(**raw)
 
     async def parse(self, *, file: AugmentInput, **extra: Any) -> TextParserResponse:
@@ -104,6 +112,11 @@ class AugmentResource:
     def scrape(self, *, url: str, **extra: Any) -> WebScrapeResponse:
         body = _drop_none({"url": url, **extra})
         raw = self._client._request_json("POST", "/augment/scrape", json_body=body)
+        # model_construct, not model_validate: Venice has shipped scrape bodies
+        # that omit/rename schema-required fields (e.g. ``format``). Bypassing
+        # validation keeps drift from raising; unknown fields land on
+        # ``model_extra`` via ``extra="allow"``. See CLAUDE.md "Response-model
+        # strategy".
         return WebScrapeResponse.model_construct(**raw)
 
     def search(
@@ -123,6 +136,9 @@ class AugmentResource:
             }
         )
         raw = self._client._request_json("POST", "/augment/search", json_body=body)
+        # model_construct, not model_validate: tolerate Venice dropping/renaming
+        # schema-required fields and keep nested ``results`` as raw dicts (no
+        # recursive validation). See CLAUDE.md "Response-model strategy".
         return WebSearchResponse.model_construct(**raw)
 
     def parse(self, *, file: AugmentInput, **extra: Any) -> TextParserResponse:

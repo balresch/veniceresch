@@ -109,6 +109,11 @@ class AsyncResponsesResource:
             stream=False,
         )
         raw = await self._client._request_json("POST", "/responses", json_body=body)
+        # model_construct, not model_validate: the /responses schema is large and
+        # fast-moving (enum-valued ``status``/``object``, polymorphic ``output``
+        # items). Bypassing validation keeps upstream drift from breaking the
+        # client; unknown fields land on ``model_extra``. See CLAUDE.md
+        # "Response-model strategy".
         return ResponsesResponse.model_construct(**raw)
 
     async def stream(
@@ -216,6 +221,11 @@ class ResponsesResource:
             stream=False,
         )
         raw = self._client._request_json("POST", "/responses", json_body=body)
+        # model_construct, not model_validate: the /responses schema is large and
+        # fast-moving (enum-valued ``status``/``object``, polymorphic ``output``
+        # items). Bypassing validation keeps upstream drift from breaking the
+        # client; unknown fields land on ``model_extra``. See CLAUDE.md
+        # "Response-model strategy".
         return ResponsesResponse.model_construct(**raw)
 
     def stream(

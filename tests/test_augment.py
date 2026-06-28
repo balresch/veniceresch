@@ -159,3 +159,44 @@ def test_sync_scrape(mock_api, sync_client):
     result = sync_client.augment.scrape(url="https://x")
     assert result.url == "https://x"
     assert result.content == "c"
+
+
+# ---- model_construct drift tolerance --------------------------------------
+# scrape/search build their wrappers with model_construct, not model_validate
+# (see the why-comments in augment.py). These pin the exact drift they tolerate:
+# a body the generated schema would reject still round-trips its present fields.
+
+
+async def test_scrape_tolerates_missing_required_field(mock_api, async_client):
+    from pydantic import ValidationError
+
+    from veniceresch.types import WebScrapeResponse
+
+    # Venice drops the schema-required ``format`` field.
+    raw = {"url": "https://x", "content": "hi"}
+    # Sanity-check that this body is exactly what model_validate would reject —
+    # so the test fails loudly if the schema ever stops requiring ``format``.
+    with pytest.raises(ValidationError):
+        WebScrapeResponse.model_validate(raw)
+
+    mock_api.post("/augment/scrape").respond(200, json=raw)
+    result = await async_client.augment.scrape(url="https://x")
+    assert result.url == "https://x"
+    assert result.content == "hi"
+
+
+async def test_search_tolerates_invalid_nested_result(mock_api, async_client):
+    from pydantic import ValidationError
+
+    from veniceresch.types import WebSearchResponse
+
+    # Nested result is missing the schema-required ``date`` field.
+    raw = {"query": "q", "results": [{"title": "t", "url": "u", "content": "c"}]}
+    with pytest.raises(ValidationError):
+        WebSearchResponse.model_validate(raw)
+
+    mock_api.post("/augment/search").respond(200, json=raw)
+    result = await async_client.augment.search(query="q")
+    assert result.query == "q"
+    # model_construct keeps nested items as the raw dict — no recursive validation.
+    assert result.results[0] == {"title": "t", "url": "u", "content": "c"}
