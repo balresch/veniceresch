@@ -217,7 +217,7 @@ added) is opt-in and does not run on normal PRs.
 
 ---
 
-## 5. File-like / streaming upload support for multipart endpoints  (review #3)  — TODO
+## 5. File-like / streaming upload support for multipart endpoints  (review #3)  — DONE
 
 **Priority: larger effort, ergonomic rather than correctness.**
 

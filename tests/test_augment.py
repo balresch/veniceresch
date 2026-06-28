@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 
 import pytest
@@ -109,6 +110,39 @@ async def test_parse_accepts_path(mock_api, async_client, tmp_path):
     raw = route.calls.last.request.content
     assert b'filename="doc.txt"' in raw
     assert b"hello" in raw
+
+
+async def test_parse_accepts_string_path(mock_api, async_client, tmp_path):
+    f = tmp_path / "report.pdf"
+    f.write_bytes(b"PDFBODY")
+    route = mock_api.post("/augment/text-parser").respond(200, json={"text": "t", "tokens": 1})
+    await async_client.augment.parse(file=str(f))
+    raw = route.calls.last.request.content
+    assert b'filename="report.pdf"' in raw
+    assert b"PDFBODY" in raw
+
+
+async def test_parse_accepts_file_like(mock_api, async_client):
+    route = mock_api.post("/augment/text-parser").respond(200, json={"text": "t", "tokens": 1})
+    handle = io.BytesIO(b"DOCSTREAM")
+    await async_client.augment.parse(file=handle)
+    raw = route.calls.last.request.content
+    assert b'filename="document.bin"' in raw  # BytesIO has no usable name
+    assert b"DOCSTREAM" in raw
+    assert not handle.closed
+
+
+async def test_parse_missing_path_raises(async_client, tmp_path):
+    with pytest.raises(FileNotFoundError):
+        await async_client.augment.parse(file=tmp_path / "missing.pdf")
+
+
+def test_sync_parse_accepts_file_like(mock_api, sync_client):
+    route = mock_api.post("/augment/text-parser").respond(200, json={"text": "t", "tokens": 1})
+    handle = io.BytesIO(b"SYNCDOC")
+    sync_client.augment.parse(file=handle)
+    assert b"SYNCDOC" in route.calls.last.request.content
+    assert not handle.closed
 
 
 async def test_search_raises_rate_limit(mock_api, async_client):

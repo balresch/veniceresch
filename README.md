@@ -186,6 +186,14 @@ transcript = await client.audio.transcribe(file=Path("clip.wav"), model="whisper
 print(transcript.text)
 ```
 
+Every `file=` argument (here, voice cloning, and `augment.parse`/`parse_text`)
+accepts raw `bytes`, a path (`str` or `Path`), or a binary file-like object —
+e.g. `transcribe(file=open("clip.wav", "rb"), ...)` or a `BytesIO`. Paths and
+file handles are **streamed** to the server rather than buffered in memory; a
+handle you pass in is left open for you to close. (The base64 `image.*`
+endpoints accept the same input forms but must buffer in full — pass an
+`https://` URL to skip uploading large local files.)
+
 Queued audio generation mirrors video — `client.audio.queue(...)` →
 `AudioQueueResponse`, poll `client.audio.retrieve(...)` /
 `wait_for_completion(...)` → `AudioRetrieveResponse`, then

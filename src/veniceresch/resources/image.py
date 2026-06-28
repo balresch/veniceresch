@@ -6,15 +6,21 @@ Covers ``/image/generate`` (JSON by default, raw bytes via
 (all of which return raw PNG bytes), and ``/image/styles``.
 
 Image inputs accept :class:`bytes` (raw image data — we base64-encode for you),
-:class:`str` (already-encoded base64 or a URL — passed through as-is), or
-:class:`pathlib.Path` (read and base64-encoded).
+:class:`str` (already-encoded base64 or a URL — passed through as-is),
+:class:`pathlib.Path` (read and base64-encoded), or a binary file-like object
+(read and base64-encoded).
+
+Unlike the multipart audio/augment uploads, these endpoints take base64 in a
+JSON body, so the bytes must be fully buffered in memory to encode them — there
+is no streaming path here. Pass an ``https://`` URL (or, where supported,
+``image_url=``) to avoid uploading large local files at all.
 """
 
 from __future__ import annotations
 
 import base64
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 
 from veniceresch.types import GenerateImageResponse, ImageStylesResponse
 
@@ -22,16 +28,23 @@ if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
-ImageInput = bytes | str | Path
+ImageInput = bytes | str | Path | IO[bytes]
 
 
 def _encode_image(image: ImageInput) -> str:
-    """Normalize an image input to a base64 string (or pass through str/URL)."""
+    """Normalize an image input to a base64 string (or pass through str/URL).
+
+    ``bytes`` / :class:`~pathlib.Path` / binary file-like objects are
+    base64-encoded (buffered in full); a ``str`` is passed through unchanged
+    (it is already base64, a data URL, or an ``https://`` URL).
+    """
     if isinstance(image, bytes):
         return base64.b64encode(image).decode("ascii")
     if isinstance(image, Path):
         return base64.b64encode(image.read_bytes()).decode("ascii")
-    return image  # str — could be base64, data URL, or https://... URL
+    if isinstance(image, str):
+        return image  # already base64, a data URL, or an https://... URL
+    return base64.b64encode(image.read()).decode("ascii")  # binary file-like
 
 
 def _drop_none(d: dict[str, Any]) -> dict[str, Any]:

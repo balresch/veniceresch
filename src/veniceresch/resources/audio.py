@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from veniceresch._errors import VeniceAPIError
+from veniceresch.resources._uploads import UploadInput, open_upload
 from veniceresch.types import (
     AudioCompleteResponse,
     AudioQueueResponse,
@@ -26,7 +26,8 @@ if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
-AudioInput = bytes | str | Path
+# bytes | str | Path | binary file-like object. See ``_uploads.open_upload``.
+AudioInput = UploadInput
 _STATUS_PROCESSING = "PROCESSING"
 _DEFAULT_TIMEOUT_S = 300.0
 _DEFAULT_POLL_S = 2.0
@@ -73,17 +74,6 @@ def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
-def _audio_file_tuple(audio: AudioInput) -> tuple[str, bytes, str]:
-    """Build a (filename, bytes, content-type) tuple for multipart upload."""
-    if isinstance(audio, bytes):
-        return ("audio.bin", audio, "application/octet-stream")
-    if isinstance(audio, Path):
-        return (audio.name, audio.read_bytes(), "application/octet-stream")
-    # str — treat as path
-    p = Path(audio)
-    return (p.name, p.read_bytes(), "application/octet-stream")
-
-
 class AsyncAudioResource:
     """Async audio resource. Accessed via ``client.audio``."""
 
@@ -125,8 +115,10 @@ class AsyncAudioResource:
         ``voice`` argument to :meth:`create_speech` alongside the same
         ``model``. Pass ``siwx_header`` to authenticate with an x402 wallet
         instead of the default Bearer key.
+
+        ``file`` may be raw ``bytes``, a path (``str`` / :class:`~pathlib.Path`,
+        streamed), or a binary file-like object (streamed; you keep ownership).
         """
-        files = {"file": _audio_file_tuple(file)}
         form = _drop_none(
             {
                 "model": model,
@@ -134,14 +126,15 @@ class AsyncAudioResource:
             }
         )
         headers = {"SIGN-IN-WITH-X": siwx_header} if siwx_header is not None else None
-        raw = await self._client._request_json(
-            "POST",
-            "/audio/voices",
-            files=files,
-            data=form,
-            headers=headers,
-            no_auth=siwx_header is not None,
-        )
+        with open_upload(file, default_name="audio.bin") as file_tuple:
+            raw = await self._client._request_json(
+                "POST",
+                "/audio/voices",
+                files={"file": file_tuple},
+                data=form,
+                headers=headers,
+                no_auth=siwx_header is not None,
+            )
         return ClonedVoiceResponse.model_validate(raw)
 
     async def transcribe(
@@ -152,8 +145,11 @@ class AsyncAudioResource:
         response_format: str | None = None,
         **extra: Any,
     ) -> AudioTranscriptionResponse:
-        """Transcribe an audio file (multipart upload)."""
-        files = {"file": _audio_file_tuple(file)}
+        """Transcribe an audio file (multipart upload).
+
+        ``file`` may be raw ``bytes``, a path (``str`` / :class:`~pathlib.Path`,
+        streamed), or a binary file-like object (streamed; you keep ownership).
+        """
         form = _drop_none(
             {
                 "model": model,
@@ -161,12 +157,13 @@ class AsyncAudioResource:
                 **{k: str(v) for k, v in extra.items() if v is not None},
             }
         )
-        raw = await self._client._request_json(
-            "POST",
-            "/audio/transcriptions",
-            files=files,
-            data=form,
-        )
+        with open_upload(file, default_name="audio.bin") as file_tuple:
+            raw = await self._client._request_json(
+                "POST",
+                "/audio/transcriptions",
+                files={"file": file_tuple},
+                data=form,
+            )
         return AudioTranscriptionResponse.model_validate(raw)
 
     async def queue(
@@ -284,7 +281,6 @@ class AudioResource:
         **extra: Any,
     ) -> ClonedVoiceResponse:
         """Sync mirror of :meth:`AsyncAudioResource.create_cloned_voice`."""
-        files = {"file": _audio_file_tuple(file)}
         form = _drop_none(
             {
                 "model": model,
@@ -292,14 +288,15 @@ class AudioResource:
             }
         )
         headers = {"SIGN-IN-WITH-X": siwx_header} if siwx_header is not None else None
-        raw = self._client._request_json(
-            "POST",
-            "/audio/voices",
-            files=files,
-            data=form,
-            headers=headers,
-            no_auth=siwx_header is not None,
-        )
+        with open_upload(file, default_name="audio.bin") as file_tuple:
+            raw = self._client._request_json(
+                "POST",
+                "/audio/voices",
+                files={"file": file_tuple},
+                data=form,
+                headers=headers,
+                no_auth=siwx_header is not None,
+            )
         return ClonedVoiceResponse.model_validate(raw)
 
     def transcribe(
@@ -310,7 +307,7 @@ class AudioResource:
         response_format: str | None = None,
         **extra: Any,
     ) -> AudioTranscriptionResponse:
-        files = {"file": _audio_file_tuple(file)}
+        """Sync mirror of :meth:`AsyncAudioResource.transcribe`."""
         form = _drop_none(
             {
                 "model": model,
@@ -318,12 +315,13 @@ class AudioResource:
                 **{k: str(v) for k, v in extra.items() if v is not None},
             }
         )
-        raw = self._client._request_json(
-            "POST",
-            "/audio/transcriptions",
-            files=files,
-            data=form,
-        )
+        with open_upload(file, default_name="audio.bin") as file_tuple:
+            raw = self._client._request_json(
+                "POST",
+                "/audio/transcriptions",
+                files={"file": file_tuple},
+                data=form,
+            )
         return AudioTranscriptionResponse.model_validate(raw)
 
     def queue(self, *, model: str, prompt: str, **extra: Any) -> AudioQueueResponse:

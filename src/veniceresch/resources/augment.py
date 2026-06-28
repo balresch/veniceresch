@@ -8,9 +8,9 @@ return — JSON (``TextParserResponse``) vs plain text (``str``).
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from veniceresch.resources._uploads import UploadInput, open_upload
 from veniceresch.types import (
     TextParserResponse,
     WebScrapeResponse,
@@ -21,21 +21,12 @@ if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
-AugmentInput = bytes | str | Path
+# bytes | str | Path | binary file-like object. See ``_uploads.open_upload``.
+AugmentInput = UploadInput
 
 
 def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
-
-
-def _augment_file_tuple(file: AugmentInput) -> tuple[str, bytes, str]:
-    """Build a (filename, bytes, content-type) tuple for multipart upload."""
-    if isinstance(file, bytes):
-        return ("document.bin", file, "application/octet-stream")
-    if isinstance(file, Path):
-        return (file.name, file.read_bytes(), "application/octet-stream")
-    p = Path(file)
-    return (p.name, p.read_bytes(), "application/octet-stream")
 
 
 class AsyncAugmentResource:
@@ -69,31 +60,38 @@ class AsyncAugmentResource:
         return WebSearchResponse.model_construct(**raw)
 
     async def parse(self, *, file: AugmentInput, **extra: Any) -> TextParserResponse:
-        """Parse a document and return the JSON form (``{text, tokens}``)."""
-        files = {"file": _augment_file_tuple(file)}
+        """Parse a document and return the JSON form (``{text, tokens}``).
+
+        ``file`` may be raw ``bytes``, a path (``str`` / :class:`~pathlib.Path`,
+        streamed), or a binary file-like object (streamed; you keep ownership).
+        """
         form = {"response_format": "json"}
         form.update({k: str(v) for k, v in extra.items() if v is not None})
-        raw = await self._client._request_json(
-            "POST",
-            "/augment/text-parser",
-            files=files,
-            data=form,
-        )
+        with open_upload(file, default_name="document.bin") as file_tuple:
+            raw = await self._client._request_json(
+                "POST",
+                "/augment/text-parser",
+                files={"file": file_tuple},
+                data=form,
+            )
         return TextParserResponse.model_validate(raw)
 
     async def parse_text(self, *, file: AugmentInput, **extra: Any) -> str:
-        """Parse a document and return the raw text body (``text/plain``)."""
-        files = {"file": _augment_file_tuple(file)}
+        """Parse a document and return the raw text body (``text/plain``).
+
+        ``file`` accepts the same forms as :meth:`parse`.
+        """
         form = {"response_format": "text"}
         form.update({k: str(v) for k, v in extra.items() if v is not None})
-        raw = await self._client._request_bytes(
-            "POST",
-            "/augment/text-parser",
-            files=files,
-            data=form,
-            headers={"Accept": "text/plain"},
-            allowed_content_types=("text/plain",),
-        )
+        with open_upload(file, default_name="document.bin") as file_tuple:
+            raw = await self._client._request_bytes(
+                "POST",
+                "/augment/text-parser",
+                files={"file": file_tuple},
+                data=form,
+                headers={"Accept": "text/plain"},
+                allowed_content_types=("text/plain",),
+            )
         return raw.decode("utf-8")
 
 
@@ -128,29 +126,31 @@ class AugmentResource:
         return WebSearchResponse.model_construct(**raw)
 
     def parse(self, *, file: AugmentInput, **extra: Any) -> TextParserResponse:
-        files = {"file": _augment_file_tuple(file)}
+        """Sync mirror of :meth:`AsyncAugmentResource.parse`."""
         form = {"response_format": "json"}
         form.update({k: str(v) for k, v in extra.items() if v is not None})
-        raw = self._client._request_json(
-            "POST",
-            "/augment/text-parser",
-            files=files,
-            data=form,
-        )
+        with open_upload(file, default_name="document.bin") as file_tuple:
+            raw = self._client._request_json(
+                "POST",
+                "/augment/text-parser",
+                files={"file": file_tuple},
+                data=form,
+            )
         return TextParserResponse.model_validate(raw)
 
     def parse_text(self, *, file: AugmentInput, **extra: Any) -> str:
-        files = {"file": _augment_file_tuple(file)}
+        """Sync mirror of :meth:`AsyncAugmentResource.parse_text`."""
         form = {"response_format": "text"}
         form.update({k: str(v) for k, v in extra.items() if v is not None})
-        raw = self._client._request_bytes(
-            "POST",
-            "/augment/text-parser",
-            files=files,
-            data=form,
-            headers={"Accept": "text/plain"},
-            allowed_content_types=("text/plain",),
-        )
+        with open_upload(file, default_name="document.bin") as file_tuple:
+            raw = self._client._request_bytes(
+                "POST",
+                "/augment/text-parser",
+                files={"file": file_tuple},
+                data=form,
+                headers={"Accept": "text/plain"},
+                allowed_content_types=("text/plain",),
+            )
         return raw.decode("utf-8")
 
 

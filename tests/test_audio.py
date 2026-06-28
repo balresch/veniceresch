@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 
 import httpx
@@ -47,6 +48,39 @@ async def test_transcribe_multipart_upload(mock_api, async_client, tmp_path):
     body = route.calls.last.request.content
     assert b"WAVDATA" in body
     assert b"whisper-1" in body
+
+
+async def test_transcribe_accepts_string_path(mock_api, async_client, tmp_path):
+    audio_path = tmp_path / "clip.wav"
+    audio_path.write_bytes(b"WAVDATA")
+    route = mock_api.post("/audio/transcriptions").respond(200, json={"text": "ok"})
+    await async_client.audio.transcribe(file=str(audio_path), model="whisper-1")
+    raw = route.calls.last.request.content
+    assert b'filename="clip.wav"' in raw
+    assert b"WAVDATA" in raw
+
+
+async def test_transcribe_accepts_raw_bytes(mock_api, async_client):
+    route = mock_api.post("/audio/transcriptions").respond(200, json={"text": "ok"})
+    await async_client.audio.transcribe(file=b"RAWAUDIO", model="whisper-1")
+    raw = route.calls.last.request.content
+    assert b'filename="audio.bin"' in raw  # default name for bytes
+    assert b"RAWAUDIO" in raw
+
+
+async def test_transcribe_accepts_file_like(mock_api, async_client):
+    route = mock_api.post("/audio/transcriptions").respond(200, json={"text": "ok"})
+    handle = io.BytesIO(b"STREAMED")
+    await async_client.audio.transcribe(file=handle, model="whisper-1")
+    raw = route.calls.last.request.content
+    assert b"STREAMED" in raw
+    # We never close a caller-supplied handle.
+    assert not handle.closed
+
+
+async def test_transcribe_missing_path_raises(async_client, tmp_path):
+    with pytest.raises(FileNotFoundError):
+        await async_client.audio.transcribe(file=tmp_path / "nope.wav", model="whisper-1")
 
 
 async def test_create_cloned_voice_multipart(mock_api, async_client, tmp_path):
@@ -189,6 +223,14 @@ def test_sync_audio_wait_raises_on_failed_when_opted_in(mock_api, sync_client):
             poll_interval_s=0.01,
             raise_on_failed=True,
         )
+
+
+def test_sync_transcribe_accepts_file_like(mock_api, sync_client):
+    route = mock_api.post("/audio/transcriptions").respond(200, json={"text": "ok"})
+    handle = io.BytesIO(b"SYNCSTREAM")
+    sync_client.audio.transcribe(file=handle, model="whisper-1")
+    assert b"SYNCSTREAM" in route.calls.last.request.content
+    assert not handle.closed
 
 
 async def test_audio_quote(mock_api, async_client):

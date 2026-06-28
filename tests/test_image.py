@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 from pathlib import Path
 
@@ -81,6 +82,14 @@ async def test_edit_reads_from_path(mock_api, async_client, tmp_path: Path):
     img_path.write_bytes(SAMPLE_BYTES)
     route = mock_api.post("/image/edit").respond(200, content=SAMPLE_BYTES)
     await async_client.image.edit(image=img_path, prompt="p")
+    body = json.loads(route.calls.last.request.content)
+    assert body["image"] == SAMPLE_B64
+
+
+async def test_edit_reads_from_file_like(mock_api, async_client):
+    # Base64 endpoints buffer the bytes; a file-like object is read in full.
+    route = mock_api.post("/image/edit").respond(200, content=SAMPLE_BYTES)
+    await async_client.image.edit(image=io.BytesIO(SAMPLE_BYTES), prompt="p")
     body = json.loads(route.calls.last.request.content)
     assert body["image"] == SAMPLE_B64
 

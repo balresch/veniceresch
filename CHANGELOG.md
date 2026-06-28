@@ -7,6 +7,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **File-like inputs for upload endpoints.** The multipart upload methods
+  (`audio.transcribe`, `audio.create_cloned_voice`, `augment.parse`,
+  `augment.parse_text`) and the base64 image methods (`image.edit`,
+  `image.multi_edit`, `image.upscale`, `image.background_remove`) now accept a
+  binary file-like object (anything with `.read()`, e.g. an open `"rb"` handle,
+  `io.BytesIO`, or a framework `UploadedFile`) in addition to the existing
+  `bytes` / `str` path / `pathlib.Path` forms. For the multipart endpoints,
+  paths and file-like objects are now **streamed** to the server via httpx
+  instead of read fully into memory first (`Path.read_bytes()`); a
+  caller-supplied handle is streamed and left open (the caller owns its
+  lifecycle), while a path the SDK opens is closed once the request completes.
+  The image endpoints still buffer in full because they send base64 in a JSON
+  body, which has no streaming path — pass an `https://` URL to skip uploading
+  large local files. A new shared `resources/_uploads.open_upload` helper backs
+  the multipart paths, removing the duplicated per-resource file-tuple builders.
 - **Opt-in failure raising for `wait_for_completion`.** `video.wait_for_completion`
   and `audio.wait_for_completion` (async and sync) gained a
   `raise_on_failed: bool = False` parameter. The default is unchanged — the
