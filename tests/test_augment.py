@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from veniceresch import VeniceRateLimitError
+from veniceresch import VeniceRateLimitError, VeniceUnexpectedContentTypeError
 
 
 async def test_scrape(mock_api, async_client):
@@ -86,6 +86,16 @@ async def test_parse_text_returns_string_and_sets_accept(mock_api, async_client)
     raw = request.content
     assert b'name="response_format"' in raw
     assert b"text" in raw
+
+
+async def test_parse_text_raises_on_unexpected_textual_body(mock_api, async_client):
+    # parse_text allow-lists text/plain only; an HTML body (e.g. an auth-proxy
+    # interstitial) is still surfaced loudly rather than decoded as document text.
+    mock_api.post("/augment/text-parser").respond(
+        200, content=b"<html>login</html>", headers={"content-type": "text/html"}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError):
+        await async_client.augment.parse_text(file=b"doc")
 
 
 async def test_parse_accepts_path(mock_api, async_client, tmp_path):

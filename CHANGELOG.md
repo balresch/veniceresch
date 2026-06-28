@@ -3,6 +3,22 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Binary endpoints now reject *all* unexpected textual 2xx bodies, not just
+  JSON.** `_guard_binary_content_type` previously only tripped on an exact
+  `application/json` content type, so a 2xx `text/html` / `text/plain` /
+  `application/xml` body (a CDN error page, an auth-proxy interstitial, a
+  presigned-URL error) was returned verbatim as "media bytes" — the same silent
+  corruption the guard exists to prevent. Such textual bodies now raise
+  `VeniceUnexpectedContentTypeError`; genuine media (`video/mp4`, `image/png`,
+  `audio/mpeg`, `application/octet-stream`, …) and untyped/empty responses are
+  unchanged. Endpoints that legitimately return text (`augment.parse_text`,
+  which expects `text/plain`) opt in via a new internal `allowed_content_types`
+  allow-list. Covers both async and sync paths.
+
 ## [0.5.4] — 2026-06-21
 
 ### Fixed

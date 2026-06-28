@@ -92,6 +92,7 @@ class AsyncAugmentResource:
             files=files,
             data=form,
             headers={"Accept": "text/plain"},
+            allowed_content_types=("text/plain",),
         )
         return raw.decode("utf-8")
 
@@ -148,6 +149,7 @@ class AugmentResource:
             files=files,
             data=form,
             headers={"Accept": "text/plain"},
+            allowed_content_types=("text/plain",),
         )
         return raw.decode("utf-8")
 

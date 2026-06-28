@@ -64,6 +64,50 @@ async def test_retrieve_binary_raises_on_json_body(mock_api, async_client):
     assert info.value.error_body["download_url"] == _VPS_STATUS["download_url"]
 
 
+@pytest.mark.parametrize(
+    "content_type",
+    ["text/html", "text/plain", "application/xml", "application/xhtml+xml"],
+)
+async def test_retrieve_binary_raises_on_textual_body(mock_api, async_client, content_type):
+    # A 2xx textual body (CDN error page, auth-proxy interstitial, presigned-URL
+    # error) is the same silent-corruption class as the JSON case and must not be
+    # returned verbatim as "MP4 bytes".
+    mock_api.post("/video/retrieve").respond(
+        200, content=b"<html>nope</html>", headers={"content-type": content_type}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await async_client.video.retrieve_binary(model="v1", queue_id="q-123")
+    assert info.value.content_type == content_type
+
+
+def test_sync_retrieve_binary_raises_on_textual_body(mock_api, sync_client):
+    mock_api.post("/video/retrieve").respond(
+        200, content=b"oops", headers={"content-type": "text/plain"}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError):
+        sync_client.video.retrieve_binary(model="v1", queue_id="q-123")
+
+
+async def test_retrieve_binary_passes_untyped_body(mock_api, async_client):
+    # No content-type header → cannot tell, so the bytes pass through unchanged.
+    route = mock_api.post("/video/retrieve").respond(200, content=b"RAWBYTES")
+    route.return_value.headers.pop("content-type", None)
+    result = await async_client.video.retrieve_binary(model="v1", queue_id="q-123")
+    assert result == b"RAWBYTES"
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    ["video/mp4", "image/png", "audio/mpeg", "application/octet-stream"],
+)
+async def test_retrieve_binary_passes_real_media(mock_api, async_client, content_type):
+    mock_api.post("/video/retrieve").respond(
+        200, content=b"MEDIA", headers={"content-type": content_type}
+    )
+    result = await async_client.video.retrieve_binary(model="v1", queue_id="q-123")
+    assert result == b"MEDIA"
+
+
 async def test_download_direct_bytes_model(mock_api, async_client):
     # Direct-bytes model: one call, MP4 bytes straight back.
     route = mock_api.post("/video/retrieve").respond(200, content=b"MP4DATA")
