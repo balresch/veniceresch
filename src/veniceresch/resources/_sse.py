@@ -57,10 +57,24 @@ def _parse_event(raw: str) -> Any | None:
             continue
         payload = line[len("data:") :].strip()
         if payload == _DONE_SENTINEL:
+            # Stop the instant we see [DONE]. If a content payload was
+            # accumulated earlier in *this same* event block, it is
+            # deliberately dropped here. That cannot happen with Venice today:
+            # the wire format emits [DONE] in its own event block, one data:
+            # line per block (see module docstring). If Venice ever co-locates
+            # a final content chunk with [DONE] in one block, decode and yield
+            # the accumulated `payloads` here *before* stopping instead of
+            # discarding them.
             raise _StreamDone
         payloads.append(payload)
     if not payloads:
         return None
+    # Spec-correct: multiple data: lines in one event are ONE logical payload,
+    # joined with \n and decoded once. A non-spec server packing two *complete
+    # independent* JSON objects into one block as separate data: lines would
+    # produce invalid joined JSON ("{...}\n{...}") and raise JSONDecodeError out
+    # of the iterator — intentional, matching the "malformed input surfaces"
+    # contract (test_invalid_json_raises_cleanly) rather than silently dropping.
     return json.loads("\n".join(payloads))
 
 

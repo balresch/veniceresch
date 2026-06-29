@@ -104,3 +104,30 @@ async def test_event_with_only_metadata_yields_nothing():
     body = b"event: ping\nid: 7\n\ndata: [DONE]\n\n"
     assert await _collect_async([body]) == []
     assert _collect_sync([body]) == []
+
+
+# ---- spec-corner decisions pinned (backlog #11) ---------------------------
+
+
+async def test_content_payload_colocated_with_done_is_dropped():
+    # A content data: line sharing its event block with [DONE] is intentionally
+    # discarded (Venice emits [DONE] in its own block, so this can't occur on
+    # the real wire — see _parse_event). The earlier {"id":"a"} event is still
+    # yielded; the co-located {"id":"dropped"} is not.
+    body = b'data: {"id":"a"}\n\ndata: {"id":"dropped"}\ndata: [DONE]\n\n'
+    assert await _collect_async([body]) == [{"id": "a"}]
+    assert _collect_sync([body]) == [{"id": "a"}]
+
+
+async def test_multiple_independent_json_objects_in_one_block_raise_cleanly():
+    import json
+
+    # Two *complete independent* JSON objects as separate data: lines in one
+    # block is non-spec: they join to "{...}\n{...}", which is invalid JSON.
+    # We deliberately surface this as JSONDecodeError rather than silently
+    # swallowing it (consistent with test_invalid_json_raises_cleanly).
+    body = b'data: {"id":"a"}\ndata: {"id":"b"}\n\n'
+    with pytest.raises(json.JSONDecodeError):
+        await _collect_async([body])
+    with pytest.raises(json.JSONDecodeError):
+        _collect_sync([body])

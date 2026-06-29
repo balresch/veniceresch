@@ -581,7 +581,26 @@ default and `raise_on_failed=True` behavior otherwise unchanged.
 
 ---
 
-## 11. Harden the SSE parser's `[DONE]`-in-block and multi-payload edges  (0.6.0 #4)  — TODO
+## 11. Harden the SSE parser's `[DONE]`-in-block and multi-payload edges  (0.6.0 #4)  — DONE
+
+**Done (2026-06-29).** Resolved both sub-cases by documentation + pinning tests,
+per the item's own "don't over-engineer / don't restructure speculatively"
+guidance — no control-flow change. Problem A: added a comment at the `[DONE]`
+branch in `_parse_event` (`_sse.py`) stating that a content payload accumulated
+earlier in the *same* event block is intentionally dropped, why that can't happen
+on Venice's wire (the module docstring documents `[DONE]` arriving in its own
+block, one `data:` line per block), and exactly what to change (decode + yield the
+accumulated `payloads` before stopping) if Venice ever co-locates. Problem B:
+added a comment at the `json.loads` join noting the join-and-decode-once is
+spec-correct (multi-line `data:` is ONE logical payload) and that a non-spec block
+carrying two *complete independent* JSON objects raises `JSONDecodeError` out of
+the iterator — deliberate, matching the existing "malformed input surfaces"
+contract (`test_invalid_json_raises_cleanly`) rather than silently dropping. Added
+two tests pinning these decisions (`test_content_payload_colocated_with_done_is_dropped`,
+`test_multiple_independent_json_objects_in_one_block_raise_cleanly`), async + sync.
+Existing multi-line-join, `[DONE]`-stops, and invalid-JSON tests unchanged. 276
+tests pass; ruff + mypy clean. Comments + additive tests only, no production
+behavior change, so no CHANGELOG entry (same as items #4, #6, #7, #8).
 
 **Priority: low.** Spec-corner cases that are unlikely against Venice's actual
 wire format (single `data:` per event, `[DONE]` in its own block — see
