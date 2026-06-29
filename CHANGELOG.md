@@ -3,7 +3,7 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.6.1] — 2026-06-29
 
 ### Added
 
