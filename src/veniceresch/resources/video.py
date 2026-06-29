@@ -29,6 +29,11 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from veniceresch._errors import VeniceAPIError, VeniceUnexpectedContentTypeError
+from veniceresch.resources._polling import (
+    VeniceJobFailedError,
+    is_failure_status,
+    is_processing,
+)
 from veniceresch.types import (
     VideoCompleteResponse,
     VideoQueueResponse,
@@ -41,26 +46,8 @@ if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
-_STATUS_PROCESSING = "PROCESSING"
 _DEFAULT_TIMEOUT_S = 600.0
 _DEFAULT_POLL_S = 2.0
-# Venice does not document failure status strings for /video/retrieve (the
-# swagger enum is PROCESSING/COMPLETED only). This curated, case-insensitive
-# set is what ``wait_for_completion(raise_on_failed=True)`` treats as failure;
-# any other non-PROCESSING status (including unknown ones) still returns
-# normally, preserving the "tolerate unknown terminal statuses" contract.
-_FAILURE_STATUSES = frozenset({"FAILED", "CANCELLED", "CANCELED", "ERROR"})
-
-
-def _is_processing(status: Any) -> bool:
-    """True while the job is still in progress (case-insensitive ``PROCESSING``).
-
-    The comparison is case-insensitive so a ``"processing"`` / ``"Processing"``
-    variant does not look terminal and end the wait mid-job. Only this in-progress
-    check is case-insensitive — the set of statuses treated as terminal is still
-    "anything not processing," preserving tolerance of unknown terminal statuses.
-    """
-    return isinstance(status, str) and status.upper() == _STATUS_PROCESSING
 
 
 class VeniceVideoTimeoutError(VeniceAPIError):
@@ -76,22 +63,16 @@ class VeniceVideoTimeoutError(VeniceAPIError):
         self.timeout_s = timeout_s
 
 
-class VeniceVideoFailedError(VeniceAPIError):
+class VeniceVideoFailedError(VeniceJobFailedError):
     """Raised by :meth:`wait_for_completion` with ``raise_on_failed=True`` when
-    the job reaches a known failure terminal state (see ``_FAILURE_STATUSES``).
+    the video job reaches a known failure terminal state.
 
-    The final retrieve response is on :attr:`result` for inspection.
+    The final retrieve response is on :attr:`result` for inspection. The shared
+    body lives on :class:`~veniceresch.resources._polling.VeniceJobFailedError`.
     """
 
     def __init__(self, queue_id: str, status: str, result: VideoRetrieveResponse) -> None:
-        super().__init__(
-            f"Video queue_id={queue_id!r} ended in failure status {status!r}",
-            status_code=0,
-            error_body={"queue_id": queue_id, "status": status},
-        )
-        self.queue_id = queue_id
-        self.status = status
-        self.result = result
+        super().__init__(queue_id, status, result, kind="Video")
 
 
 def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
@@ -274,12 +255,8 @@ class AsyncVideoResource:
         deadline = time.monotonic() + timeout_s
         while True:
             result = await self.retrieve(model=model, queue_id=queue_id)
-            if not _is_processing(result.status):
-                if (
-                    raise_on_failed
-                    and isinstance(result.status, str)
-                    and result.status.upper() in _FAILURE_STATUSES
-                ):
+            if not is_processing(result.status):
+                if raise_on_failed and is_failure_status(result.status):
                     raise VeniceVideoFailedError(queue_id, result.status, result)
                 return result
             if time.monotonic() >= deadline:
@@ -410,12 +387,8 @@ class VideoResource:
         deadline = time.monotonic() + timeout_s
         while True:
             result = self.retrieve(model=model, queue_id=queue_id)
-            if not _is_processing(result.status):
-                if (
-                    raise_on_failed
-                    and isinstance(result.status, str)
-                    and result.status.upper() in _FAILURE_STATUSES
-                ):
+            if not is_processing(result.status):
+                if raise_on_failed and is_failure_status(result.status):
                     raise VeniceVideoFailedError(queue_id, result.status, result)
                 return result
             if time.monotonic() >= deadline:

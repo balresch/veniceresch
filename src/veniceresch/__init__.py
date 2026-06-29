@@ -20,6 +20,7 @@ from veniceresch._errors import (
 )
 from veniceresch._version import __version__
 from veniceresch.pagination import AsyncPaginator, Paginator
+from veniceresch.resources._polling import VeniceJobFailedError
 from veniceresch.resources.audio import VeniceAudioFailedError, VeniceAudioTimeoutError
 from veniceresch.resources.video import VeniceVideoFailedError, VeniceVideoTimeoutError
 
@@ -36,6 +37,7 @@ __all__ = [
     "VeniceContentViolationError",
     "VeniceError",
     "VeniceInsufficientBalanceError",
+    "VeniceJobFailedError",
     "VeniceNotFoundError",
     "VenicePayloadTooLargeError",
     "VeniceProviderContentPolicyError",

@@ -648,7 +648,27 @@ deliberate.
 
 ---
 
-## 12. Share the audio/video job-failure machinery  (0.6.0 #5)  — TODO
+## 12. Share the audio/video job-failure machinery  (0.6.0 #5)  — DONE
+
+**Done (2026-06-29).** Lifted the shared pieces into a new
+`src/veniceresch/resources/_polling.py` (chosen over folding into `_uploads.py`,
+which stays upload-scoped — mixing job-status logic into an uploads module would
+hurt the readability CLAUDE.md prizes; the item explicitly allows the sibling
+module). It now holds the single `_FAILURE_STATUSES` frozenset, the
+`is_processing` / `is_failure_status` case-insensitive predicates (folding in
+item #10's per-module `_is_processing` helper), and a `VeniceJobFailedError`
+base carrying `queue_id` / `status` / `result`. `VeniceAudioFailedError` /
+`VeniceVideoFailedError` collapse onto thin subclasses that pass a `kind=`
+label; their public names, `__init__` signatures, attributes, and the
+`__init__.py` re-exports are unchanged. `VeniceJobFailedError` is additionally
+re-exported from `__init__.py` so callers can catch both with one `except`. The
+four `wait_for_completion` bodies (audio/video, async/sync) now call the shared
+predicates. Added `tests/test_polling.py`: a parametrized parity test driving
+both resources off the *single* shared set (so a future status addition
+exercises both automatically), a hierarchy/identity check, and predicate
+case-insensitivity. Did **not** merge the audio/video resources or touch the
+sync/async mirroring. 282 tests pass; ruff + mypy clean. New public export, so a
+CHANGELOG "Added" entry was added (unlike items #4/#6/#7/#8/#11).
 
 **Priority: medium, cleanup (CONFIRMED duplication).** Item #3 created this
 machinery in two places; item #5 of the new release created `_uploads.py` as the

@@ -5,6 +5,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **`VeniceJobFailedError` base exception.** `VeniceAudioFailedError` and
+  `VeniceVideoFailedError` (raised by `wait_for_completion(raise_on_failed=True)`)
+  now share a common `VeniceJobFailedError` base, so callers can catch both
+  audio and video job failures with one `except`. The two named classes and
+  their attributes (`queue_id`, `status`, `result`) are unchanged. Internally,
+  the duplicated failure-status set, the `is_processing` / `is_failure_status`
+  predicates, and the error body now live once in `resources/_polling.py`
+  instead of being copied between the audio and video resources.
+
 ### Fixed
 
 - **Binary content-type guard no longer rejects real media or expected text.**
