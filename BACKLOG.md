@@ -367,7 +367,7 @@ test pinning the drift case it tolerates.
 
 ---
 
-## 8. Regen-script post-generation guard  (review secondary obs.)  — TODO
+## 8. Regen-script post-generation guard  (review secondary obs.)  — DONE
 
 **Priority: low / nice-to-have.**
 
@@ -383,6 +383,18 @@ remind (in script output or CLAUDE.md) to run `pytest` + `mypy` before
 committing regenerated types.
 
 **Acceptance:** regen fails loudly if any generated class still forbids extras.
+
+**Done (2026-06-28).** Added a post-generation guard to
+`scripts/regen_types.sh`: after the strip + `ruff format`, it greps the
+generated file for `forbid` and `exit 1`s with a remediation message if any
+survive (pointing at the strip regex to update). Added a `NOTE` comment block at
+the strip step explaining the regex is keyed to datamodel-codegen's exact output
+formatting and that the guard catches drift in that formatting. Added a closing
+reminder line to run `pytest` + `mypy src/veniceresch` before committing
+regenerated types. Verified `bash -n` passes and the guard both passes on the
+current clean `_generated.py` and trips on a simulated `extra="forbid"`
+leftover. Pure tooling change (no production code, no types regenerated), so no
+CHANGELOG entry.
 
 ---
 
