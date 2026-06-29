@@ -13,6 +13,21 @@ A typed, async-first Python client for the [Venice.ai](https://venice.ai) API.
   (`venice_parameters`, typed errors, binary response handling, video
   polling helper).
 
+### What "typed" means here
+
+You get **typed resource methods** (autocompleted kwargs, typed return
+wrappers) while the client stays **tolerant of Venice API drift**. The
+response wrappers are deliberately shallow: top-level fields are typed, but
+nested collections are exposed as `dict[str, Any]` rather than strict
+generated models — which is why the examples below index into dicts
+(`response.choices[0]["message"]["content"]`, `created.data["apiKey"]`).
+That keeps a renamed or dropped upstream field from breaking your call
+mid-stream. Unknown fields are preserved on `.model_extra` instead of
+raising. When you do want the strict nested form, validate an element
+explicitly — e.g. `ModelResponse.model_validate(result.data[0])`. This is an
+alpha-stage choice; don't expect deep end-to-end type safety on nested
+payloads.
+
 ## Install
 
 ```bash
@@ -88,7 +103,8 @@ async for event in stream:
 `client.chat.stream(...)` is an explicit alias; it uses the same
 await-then-iterate contract.
 
-`/responses` streams through the same contract:
+`/responses` is its **own** Venice API (not an OpenAI-compatibility alias
+for chat), but it streams through the same await-then-iterate contract:
 
 ```python
 stream = await client.responses.create(

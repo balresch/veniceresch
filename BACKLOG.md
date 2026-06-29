@@ -792,7 +792,18 @@ today.
 
 ---
 
-## Secondary observations (no action / framing only)
+## Secondary observations (no action / framing only)  — ADDRESSED (README pass, 2026-06-29)
+
+**Done (2026-06-29).** Docs-only README framing pass; no code change, no
+CHANGELOG entry. Added a "What 'typed' means here" subsection under "Why this
+exists" stating the honest contract — typed resource methods + shallow typed
+wrappers, nested collections deliberately `dict[str, Any]` for drift tolerance,
+`.model_extra` for unknowns, `model_validate(element)` as the strict escape
+hatch, framed as an alpha-stage choice (don't oversell deep nested type
+safety). Made `client.responses`'s own-API status explicit ("its **own** Venice
+API, not an OpenAI-compatibility alias for chat"). The other alias boundaries
+(`client.image` vs `client.images`, `chat.create` == `chat.completions.create`)
+were already explicit, so left unchanged.
 
 - **Typed but not deeply typed.** Many fields are `dict[str, Any]` / `Any`
   (chat messages, choices, drift-prone endpoints) — a deliberate alpha-stage
