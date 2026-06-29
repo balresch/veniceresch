@@ -164,6 +164,24 @@ async def test_audio_wait_returns_on_completed(mock_api, async_client):
     assert result.status == "COMPLETED"
 
 
+async def test_audio_wait_keeps_polling_on_lowercase_processing(mock_api, async_client):
+    # A non-uppercase in-progress status must not look terminal and end the wait
+    # mid-job; the loop keeps polling until a genuinely terminal status arrives.
+    counter = {"n": 0}
+
+    def handler(request):
+        counter["n"] += 1
+        status = "Processing" if counter["n"] < 2 else "COMPLETED"
+        return httpx.Response(200, json={"status": status})
+
+    mock_api.post("/audio/retrieve").mock(side_effect=handler)
+    result = await async_client.audio.wait_for_completion(
+        model="a", queue_id="q", timeout_s=5.0, poll_interval_s=0.01
+    )
+    assert result.status == "COMPLETED"
+    assert counter["n"] == 2
+
+
 async def test_audio_wait_raises_on_timeout(mock_api, async_client):
     def handler(request):
         return httpx.Response(200, json={"status": "PROCESSING"})

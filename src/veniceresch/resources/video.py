@@ -52,6 +52,17 @@ _DEFAULT_POLL_S = 2.0
 _FAILURE_STATUSES = frozenset({"FAILED", "CANCELLED", "CANCELED", "ERROR"})
 
 
+def _is_processing(status: Any) -> bool:
+    """True while the job is still in progress (case-insensitive ``PROCESSING``).
+
+    The comparison is case-insensitive so a ``"processing"`` / ``"Processing"``
+    variant does not look terminal and end the wait mid-job. Only this in-progress
+    check is case-insensitive — the set of statuses treated as terminal is still
+    "anything not processing," preserving tolerance of unknown terminal statuses.
+    """
+    return isinstance(status, str) and status.upper() == _STATUS_PROCESSING
+
+
 class VeniceVideoTimeoutError(VeniceAPIError):
     """Raised when :meth:`wait_for_completion` exceeds its timeout."""
 
@@ -184,15 +195,23 @@ class AsyncVideoResource:
         (VPS-backed models do not carry the URL on ``/video/retrieve`` — capture
         it from ``queue()`` and pass it here).
         """
+        # A presigned/CDN URL is an opaque object-store download, not a Venice
+        # API surface — object stores routinely serve real media as text/plain
+        # when no Content-Type metadata is set, so guarding the content type here
+        # would reject genuine bytes. Skip the guard for these fetches.
         if download_url is not None:
-            return await self._client._request_bytes("GET", download_url, no_auth=True)
+            return await self._client._request_bytes(
+                "GET", download_url, no_auth=True, guard_content_type=False
+            )
         try:
             return await self.retrieve_binary(model=model, queue_id=queue_id)
         except VeniceUnexpectedContentTypeError as exc:
             url = _download_url_from(exc)
             if url is None:
                 raise
-            return await self._client._request_bytes("GET", url, no_auth=True)
+            return await self._client._request_bytes(
+                "GET", url, no_auth=True, guard_content_type=False
+            )
 
     async def quote(
         self,
@@ -255,7 +274,7 @@ class AsyncVideoResource:
         deadline = time.monotonic() + timeout_s
         while True:
             result = await self.retrieve(model=model, queue_id=queue_id)
-            if result.status != _STATUS_PROCESSING:
+            if not _is_processing(result.status):
                 if (
                     raise_on_failed
                     and isinstance(result.status, str)
@@ -341,15 +360,19 @@ class VideoResource:
 
         Sync mirror of :meth:`AsyncVideoResource.download`.
         """
+        # See AsyncVideoResource.download: presigned URLs are opaque downloads,
+        # so the binary content-type guard is skipped for them.
         if download_url is not None:
-            return self._client._request_bytes("GET", download_url, no_auth=True)
+            return self._client._request_bytes(
+                "GET", download_url, no_auth=True, guard_content_type=False
+            )
         try:
             return self.retrieve_binary(model=model, queue_id=queue_id)
         except VeniceUnexpectedContentTypeError as exc:
             url = _download_url_from(exc)
             if url is None:
                 raise
-            return self._client._request_bytes("GET", url, no_auth=True)
+            return self._client._request_bytes("GET", url, no_auth=True, guard_content_type=False)
 
     def quote(
         self,
@@ -387,7 +410,7 @@ class VideoResource:
         deadline = time.monotonic() + timeout_s
         while True:
             result = self.retrieve(model=model, queue_id=queue_id)
-            if result.status != _STATUS_PROCESSING:
+            if not _is_processing(result.status):
                 if (
                     raise_on_failed
                     and isinstance(result.status, str)

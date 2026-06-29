@@ -39,6 +39,17 @@ _DEFAULT_POLL_S = 2.0
 _FAILURE_STATUSES = frozenset({"FAILED", "CANCELLED", "CANCELED", "ERROR"})
 
 
+def _is_processing(status: Any) -> bool:
+    """True while the job is still in progress (case-insensitive ``PROCESSING``).
+
+    The comparison is case-insensitive so a ``"processing"`` / ``"Processing"``
+    variant does not look terminal and end the wait mid-job. Only this in-progress
+    check is case-insensitive — the set of statuses treated as terminal is still
+    "anything not processing," preserving tolerance of unknown terminal statuses.
+    """
+    return isinstance(status, str) and status.upper() == _STATUS_PROCESSING
+
+
 class VeniceAudioTimeoutError(VeniceAPIError):
     """Raised when :meth:`wait_for_completion` exceeds its timeout."""
 
@@ -233,7 +244,7 @@ class AsyncAudioResource:
         deadline = time.monotonic() + timeout_s
         while True:
             result = await self.retrieve(model=model, queue_id=queue_id)
-            if result.status != _STATUS_PROCESSING:
+            if not _is_processing(result.status):
                 if (
                     raise_on_failed
                     and isinstance(result.status, str)
@@ -373,7 +384,7 @@ class AudioResource:
         deadline = time.monotonic() + timeout_s
         while True:
             result = self.retrieve(model=model, queue_id=queue_id)
-            if result.status != _STATUS_PROCESSING:
+            if not _is_processing(result.status):
                 if (
                     raise_on_failed
                     and isinstance(result.status, str)

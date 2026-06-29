@@ -1,8 +1,10 @@
 # veniceresch Backlog
 
-Derived from the 2026-06-28 code review (`VENICERESCH_REVIEW.md`), then
-fact-checked against the working tree. Each item is self-contained: a future
-session should be able to pick up any single item without re-reading the review.
+Items #1–#8 derive from the 2026-06-28 code review (`VENICERESCH_REVIEW.md`);
+items #9–#13 derive from a 2026-06-29 review of the `v0.5.4..v0.6.0` release
+(see that section's header). All are fact-checked against the working tree. Each
+item is self-contained: a future session should be able to pick up any single
+item without re-reading the review.
 
 Items are ordered by recommended execution order (cheapest / highest-value
 first), **not** by the review's original numbering. The review's original
@@ -395,6 +397,336 @@ regenerated types. Verified `bash -n` passes and the guard both passes on the
 current clean `_generated.py` and trips on a simulated `extra="forbid"`
 leftover. Pure tooling change (no production code, no types regenerated), so no
 CHANGELOG entry.
+
+---
+
+## 0.6.0 review (2026-06-29)
+
+Derived from a high-effort multi-agent review of the `v0.5.4..v0.6.0` diff,
+fact-checked against the working tree. Several of these are **regressions
+introduced by the 0.6.0 fixes for items #1–#3 above** — the hardening landed,
+but a few guards are now stricter than Venice's actual wire behavior. Same
+self-contained / ordered-by-value convention as items #1–#8.
+
+---
+
+## 9. Stop the binary content-type guard from rejecting real media / text endpoints  (0.6.0 #1, #2, #8)  — DONE
+
+**Done (2026-06-29).** Took the hybrid the item describes. The guard
+(`_client.py`) now honors the request's `Accept` header via a new
+`_request_accepts(request, main_type)` helper (exact match + `*/*` and `type/*`
+wildcards): a 2xx body whose content type the caller explicitly asked for is not
+"unexpected" and passes through, textual or not. This captures the real rule the
+per-endpoint allow-list only gestured at, so `allowed_content_types` is **deleted**
+from `_guard_binary_content_type` and both `_request_bytes` overloads (closes
+0.6.0 #8). `augment.parse_text` keeps advertising `Accept: text/plain` and now
+passes the guard with no special-casing — a comment notes that accepting more
+textual forms is a one-line `Accept` change. For Problem A, `video.download()`'s
+two presigned-URL fetches (async + sync) now pass `guard_content_type=False`: a
+presigned object-store URL is an opaque download, not a Venice API surface, so
+`text/plain`-labeled real MP4 bytes return rather than raise. Problem B was left
+conservative — no live evidence Venice returns `text/markdown`/`text/html` from
+`parse_text`, and an existing test treats `text/html` there as a bad interstitial;
+the `Accept`-header mechanism makes widening trivial if evidence appears. Item #1's
+guarantee is intact: a `text/html` error page on an endpoint that only asked for
+media still raises. Added tests: presigned-URL download returns `text/plain` /
+`text/html` / `application/xml`-labeled bytes (async parametrized + sync + the
+JSON-fallback path), sync `parse_text` parity; updated the `parse_text` raises-on-
+unexpected-textual comment. 271 tests pass; ruff + mypy clean. **Decision-needed
+note (carried forward):** confirm against the live API (item #4 smoke workflow)
+whether `parse_text` ever returns non-`text/plain` textual types before widening
+its `Accept` header.
+
+**Priority: highest.** This is a behavioral regression in the exact path item #1
+hardened: the guard now over-rejects, turning previously-working downloads and
+text-extraction calls into exceptions. Resolving it also dissolves the
+single-consumer `allowed_content_types` special case (0.6.0 #8).
+
+**Background.** Item #1 widened `_guard_binary_content_type`
+(`src/veniceresch/_client.py:75-124`) to raise `VeniceUnexpectedContentTypeError`
+for *any* textual 2xx body on a binary request — `application/json` (line 97) and
+now every `text/*` / `application/xml` / `application/xhtml+xml` type
+(`_is_textual_content_type`, `:63-72`; raise at `:113-124`). To carve out the one
+endpoint that legitimately returns text, an `allowed_content_types` allow-list was
+threaded through the guard (`:77`, matched at `:95-96`) and both `_request_bytes`
+overloads. The **only** non-empty caller is `augment.parse_text`
+(`augment.py:101` async / `:168` sync), which passes `("text/plain",)`.
+
+**Problem A — `video.download()` of a presigned/CDN URL.** `download()` and
+`retrieve_binary()` call `_request_bytes` with **no** `allowed_content_types`
+(default `()`), so every textual content-type raises. A presigned-URL CDN or
+S3-style object store that serves genuine MP4/PNG bytes but labels them
+`text/plain` (object stores commonly default to this when no Content-Type
+metadata is set) now fails — the user can't download a completed video even
+though the bytes are real media. The guard's own docstring (`:81-87`) frames
+textual bodies as "CDN error page / presigned-URL error," but a correctly-served
+mislabeled object is the false-positive case it doesn't distinguish.
+
+**Problem B — `augment.parse_text` narrowed to `text/plain` only.** Pre-0.6.0
+the guard let any non-JSON 2xx body through; now `parse_text` raises for any
+textual type other than `text/plain`. If Venice returns extracted document text
+as `text/markdown`, `text/html`, or `text/xml` (all plausible for a
+text-extraction endpoint), `parse_text` raises instead of returning the string —
+breaking previously-working document parsing.
+
+**Problem C — altitude (0.6.0 #8).** `allowed_content_types` widens shared client
+infrastructure (`_guard_binary_content_type` + both `_request_bytes` overloads at
+`:279`/`:491`, forwarded `:292`/`:504`) for exactly one consumer. The deeper rule
+the special case gestures at — "a content-type the request explicitly asked for
+via `Accept` is not unexpected" — is never captured, so the next text-returning
+binary caller will bolt on another literal tuple.
+
+**Fix (preferred, captures the real rule).** Have the guard honor the request's
+`Accept` header: a 2xx body whose content-type matches what the caller asked for
+is by definition *not* unexpected and must pass through, textual or not. Then:
+- `augment.parse_text` already sends `headers={"Accept": "text/plain"}` (verify),
+  so it passes the guard with **no** `allowed_content_types` argument — delete the
+  parameter from the guard and both `_request_bytes` overloads (closes #8).
+- `video.download()` of a presigned URL sends `Accept: application/octet-stream`
+  (or `video/mp4`); a CDN that honors it returns matching bytes and passes. A CDN
+  that ignores `Accept` and returns `text/html` (a real error page) still raises —
+  the genuine corruption case is preserved.
+
+Keep the `application/json` VPS-video branch (`:97-112`) as-is — that's a
+different, documented signal (media lives at `download_url`).
+
+**Fix (minimal fallback, if Accept-matching proves leaky).** Keep
+`allowed_content_types` but: (a) default `video.download()`'s presigned-URL path
+to a permissive raw-bytes fetch that skips the textual guard entirely (a
+presigned URL is an opaque download, not a Venice API surface), and (b) widen
+`augment.parse_text`'s allow-list to the textual types a parser realistically
+returns (`text/plain`, `text/markdown`, `text/html`, `application/xml`). This
+leaves the special case in place — prefer the Accept-header approach.
+
+**Decision needed (carry into the session).** Confirm against Venice's live API
+whether `video.download` presigned URLs and `augment.parse_text` actually return
+non-`octet-stream`/`text-plain` content-types before choosing how permissive to
+be — the integration smoke workflow (item #4) is the place to check. Don't loosen
+the guard further than the evidence warrants; over-correcting reopens item #1's
+silent-corruption hole.
+
+**Tests** (`tests/`, respx-mocked, async + sync):
+- `video.download` with a presigned-URL body labeled `text/plain` but carrying
+  real bytes returns the bytes (does not raise).
+- `augment.parse_text` returns the string for a `text/markdown` (and `text/html`)
+  body.
+- A binary endpoint that did **not** ask for a textual type still raises
+  `VeniceUnexpectedContentTypeError` on a `text/html` error page (item #1's
+  guarantee intact).
+- The existing JSON-guard test and the `text/plain` parse_text test keep passing.
+
+**Acceptance:** real-but-mislabeled media downloads succeed; `parse_text` returns
+non-`text/plain` textual bodies; genuine error pages on binary endpoints still
+fail loudly; if the Accept-header route is taken, `allowed_content_types` is gone
+from the client surface.
+
+---
+
+## 10. Make `wait_for_completion`'s terminal check case-insensitive  (0.6.0 #3)  — DONE
+
+**Done (2026-06-29).** Added a module-level `_is_processing(status)` predicate to
+both `video.py` and `audio.py` (next to `_FAILURE_STATUSES`): case-insensitive
+`status.upper() == _STATUS_PROCESSING`, guarded by `isinstance(status, str)`.
+Replaced the exact-match `result.status != _STATUS_PROCESSING` at all four sites
+(`video.py` async/sync, `audio.py` async/sync) with `not _is_processing(...)`.
+Only the *in-progress* comparison became case-insensitive — the set of statuses
+treated as terminal is unchanged ("anything not processing"), so the deliberate
+"tolerate unknown terminal statuses" contract from item #3 is preserved, and a
+non-string/None status still falls through to terminal exactly as before. The
+predicate is the shared casing helper item #12 proposes folding into
+`_uploads.py`/`_polling.py`; for now it lives once per module. Added tests: a
+lowercase/`Processing` in-progress status keeps the loop polling until
+`COMPLETED` (audio async; video async + sync). Existing uppercase, failure,
+unknown-terminal, and timeout tests unchanged. 274 tests pass; ruff + mypy clean.
+
+**Priority: high, tiny.** Two-line defensive fix; internal inconsistency
+introduced alongside item #3's failure-raising.
+
+**Problem.** The terminal-state check is exact-match uppercase while the failure
+check immediately below it is case-insensitive — same method, two different
+casing assumptions:
+
+```python
+# video.py:258 (async) / :390 (sync); audio.py:236 (async) / :376 (sync)
+if result.status != _STATUS_PROCESSING:          # exact-match "PROCESSING"
+    if (raise_on_failed and isinstance(result.status, str)
+            and result.status.upper() in _FAILURE_STATUSES):   # case-INsensitive
+        raise VeniceVideoFailedError(...)
+    return result
+```
+
+If Venice ever returns the in-progress status as `"processing"` / `"Processing"`,
+the `!=` treats it as terminal and `wait_for_completion` returns mid-job; the
+caller then calls `download()` / `retrieve_binary()` on an unfinished asset and
+gets a `VeniceUnexpectedContentTypeError` (JSON status body, post-item-#1) or
+empty media. The `.upper()` on the very next line is the tell that the casing
+isn't trusted.
+
+**Constraint.** Item #3 deliberately preserved "return on any non-PROCESSING
+status (including unknown ones)." Keep that — only the *PROCESSING comparison*
+should become case-insensitive, not the set of statuses treated as terminal.
+
+**Fix.** Compare case-insensitively against `_STATUS_PROCESSING`, e.g.
+`isinstance(result.status, str) and result.status.upper() == _STATUS_PROCESSING`
+(or normalize once into a local). Apply to all four sites: `video.py:258`/`:390`,
+`audio.py:236`/`:376`. Consider a tiny shared `_is_processing(status)` predicate
+(see item #12, which already proposes sharing this neighborhood).
+
+**Tests:** a `"processing"` (lowercase) retrieve response keeps the loop polling
+(does not return early); existing uppercase `PROCESSING` path unchanged; failure
+and timeout paths unchanged. Audio + video, async + sync.
+
+**Acceptance:** a non-uppercase in-progress status no longer ends the wait;
+default and `raise_on_failed=True` behavior otherwise unchanged.
+
+---
+
+## 11. Harden the SSE parser's `[DONE]`-in-block and multi-payload edges  (0.6.0 #4)  — TODO
+
+**Priority: low.** Spec-corner cases that are unlikely against Venice's actual
+wire format (single `data:` per event, `[DONE]` in its own block — see
+`_sse.py:1-13` docstring). Item #2's multi-`data:` join is otherwise correct.
+Flagged for completeness; a comment may be the right resolution for some sub-cases.
+
+**Problem A — payload dropped when sharing a block with `[DONE]`.** `_parse_event`
+(`src/veniceresch/resources/_sse.py:50-64`) accumulates `data:` payloads and
+`raise _StreamDone` the instant it sees `[DONE]` (`:59-60`). Any content payload
+appended earlier in the *same* event block is discarded, and callers
+(`aiter_sse_events:78-83` / `iter_sse_events:100-106`) `return` on `_StreamDone`.
+If Venice ever packs a final content chunk and `[DONE]` into one block, that chunk
+is silently lost (the iterator ends one chunk short). Pinned today by
+`test_done_as_second_data_line_still_stops`.
+
+**Problem B — multiple independent JSON payloads in one block.** `:64` joins all
+`data:` payloads with `\n` and `json.loads` once — correct per SSE spec (multi-line
+`data:` is one logical payload). But if a non-spec server emits two *complete
+independent* JSON objects as separate `data:` lines in one block, the joined
+`{...}\n{...}` is invalid JSON and `json.loads` raises `JSONDecodeError` out of the
+generator, aborting the whole stream. The pre-0.6.0 "return first line" tolerated
+this by accident.
+
+**Fix (decide per sub-case; do not over-engineer).**
+- A: if Venice's wire format ever co-locates content with `[DONE]`, yield the
+  accumulated payload *before* honoring the stop. Otherwise add a code comment at
+  `:59-60` documenting that a same-block payload is intentionally dropped and why
+  it can't happen with Venice today. Don't restructure the control flow
+  speculatively.
+- B: wrap the `json.loads` at `:64` so a decode failure on a multi-payload block
+  is handled deliberately (skip-and-continue, or split-and-yield-each) instead of
+  killing the stream — only if we decide non-spec multi-object blocks are worth
+  tolerating. If not, leave as-is (spec-correct) and note it.
+
+Apply to the single `_parse_event` helper — both async and sync iterators call it.
+
+**Tests** (`tests/`, grep `aiter_sse_events`): whichever sub-cases are chosen —
+content + `[DONE]` in one block (drop documented or payload preserved); a
+malformed multi-object block doesn't abort the surrounding stream. Existing
+multi-line-join and `[DONE]`-stops tests keep passing.
+
+**Acceptance:** Venice's current single-`data:` streams are byte-for-byte
+unchanged; the chosen edge behaviors are either fixed or explicitly documented as
+deliberate.
+
+---
+
+## 12. Share the audio/video job-failure machinery  (0.6.0 #5)  — TODO
+
+**Priority: medium, cleanup (CONFIRMED duplication).** Item #3 created this
+machinery in two places; item #5 of the new release created `_uploads.py` as the
+shared-helper home for exactly these mirrored resources, so this is the natural
+landing spot.
+
+**Problem.** `_FAILURE_STATUSES = frozenset({"FAILED", "CANCELLED", "CANCELED",
+"ERROR"})` is defined identically at `audio.py:39` and `video.py:52`; the
+detection branch (`isinstance(result.status, str) and result.status.upper() in
+_FAILURE_STATUSES`) is pasted verbatim into all four `wait_for_completion` bodies
+(`audio.py:240`/`:380`, `video.py:262`/`:394` — line numbers approximate, confirm
+in tree); and `VeniceAudioFailedError` / `VeniceVideoFailedError`
+(`audio.py:~62` / `video.py:68`) are structurally identical (same `__init__`
+signature, `status_code=0`, `error_body={"queue_id":…, "status":…}` dict, same
+three attrs). Risk: when Venice ships a new terminal failure string (e.g.
+`"REJECTED"` / `"TIMEOUT"`), an editor updates one frozenset and forgets the
+other, so `raise_on_failed=True` diverges between two resources CLAUDE.md
+explicitly documents as mirroring each other.
+
+**Fix.** Lift the shared pieces into one place — `_uploads.py` exists for exactly
+this (or a sibling `_polling.py` if `_uploads.py` should stay upload-scoped;
+prefer reusing `_uploads.py` per the release's own consolidation intent):
+- a single `_FAILURE_STATUSES` frozenset;
+- a small predicate, e.g. `is_failure_status(status) -> bool` (and, folding in
+  item #10, `is_processing(status)`), so casing logic lives once;
+- a shared base for the failed errors (e.g. `VeniceJobFailedError(VeniceAPIError)`
+  carrying `queue_id` / `status` / `result`), with `VeniceAudioFailedError` /
+  `VeniceVideoFailedError` as thin subclasses to keep the existing public names
+  and `__init__.py` re-exports stable.
+
+Keep the two named exception classes (callers/`__all__`/`__init__.py` re-export
+them) — only their bodies collapse onto the base. Apply across audio + video,
+async + sync.
+
+**Constraint.** Don't merge audio and video resources or erase the deliberate
+sync/async mirroring (CLAUDE.md: "Two distinct layers; they must stay distinct").
+This is shared *constants + predicate + error base*, not a resource refactor.
+
+**Tests:** existing `raise_on_failed` tests for both audio and video still pass
+unchanged; add one asserting both resources raise on the *same* status string so
+future divergence is caught (parity in spirit of item #6). mypy + ruff clean.
+
+**Acceptance:** failure-status set and predicate defined once; both resources
+raise the same typed-error hierarchy; public class names and re-exports unchanged.
+
+---
+
+## 13. Offload blocking file reads off the async event loop on upload/encode paths  (0.6.0 #6, #7)  — TODO
+
+**Priority: medium, efficiency (CONFIRMED).** Introduced by item #5's
+file-like/streaming upload support: the streaming handle keeps disk I/O on the
+loop for the whole request rather than buffering once up front.
+
+**Problem A — multipart uploads stream a synchronous handle (0.6.0 #6).**
+`open_upload` (`_uploads.py:47-50`) opens a path with a blocking `path.open("rb")`
+handle and yields it into `await _client._request_json(files=...)` /
+`_request_bytes(files=...)`. httpx's async multipart encoder iterates that handle
+with synchronous `file.read()` calls *inside the coroutine*, so uploading a large
+file to `/audio/transcriptions`, `/audio/voices`, or `/augment/text-parser`
+(`audio.py:~129`, `augment.py:~148`) blocks the event loop for the whole request
+write — every other concurrent coroutine stalls. (Pre-0.6.0 `read_bytes()` blocked
+once before the request; the streamed handle blocks across it.)
+
+**Problem B — file-like image input read+base64 on the async path (0.6.0 #7).**
+`_encode_image` (`image.py:34-47`) does a synchronous `image.read()` (line 47) and
+`Path.read_bytes()` (line 44) inside the async coroutines that call it (edit
+`~:100`, multi_edit `~:122`, upscale `~:141`, background_remove `~:163`), fully
+buffering the file plus its ~33%-larger base64 copy and blocking the loop during
+the read.
+
+**Fix.**
+- Async paths only: offload the blocking read with `asyncio.to_thread(...)` so
+  disk I/O leaves the event loop. For multipart (A), either read the path in a
+  thread and hand httpx the resulting `bytes` (simplest; gives up streaming but
+  unblocks the loop), or feed httpx an async-friendly file wrapper if one is
+  readily available — prefer the `to_thread` read unless streaming large files is
+  a stated goal. For image base64 (B), wrap the `read()`/`read_bytes()` +
+  `b64encode` in `asyncio.to_thread`.
+- Sync paths: unchanged (blocking is correct there).
+- Base64-in-JSON inherently buffers — don't try to stream image-generate; the
+  fix is purely "don't block the loop on the read." The `image.py:8-10` /
+  `_uploads.py` docstrings already document the buffering; extend them to note the
+  async read is offloaded.
+
+Keep `bytes` inputs zero-copy (already in memory; nothing to offload) and keep
+caller-supplied-handle lifecycle semantics (`_uploads.py:52-56` — never close a
+handle we didn't open).
+
+**Tests:** existing upload/image tests (Path / str / bytes / file-handle
+parametrization from item #5) still pass and produce identical multipart bodies;
+add a check that the async path doesn't regress behavior. (Event-loop-blocking is
+hard to assert directly; focus tests on output parity and rely on review for the
+`to_thread` offload.)
+
+**Acceptance:** large async uploads / image encodes no longer block the loop for
+the duration of the read; sync behavior unchanged; wire output byte-identical to
+today.
 
 ---
 

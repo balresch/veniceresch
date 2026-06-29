@@ -72,10 +72,30 @@ def _is_textual_content_type(main_type: str) -> bool:
     )
 
 
-def _guard_binary_content_type(
-    response: httpx.Response,
-    allowed_content_types: tuple[str, ...] = (),
-) -> None:
+def _request_accepts(request: httpx.Request | None, main_type: str) -> bool:
+    """True if the request's ``Accept`` header advertised this content type.
+
+    A 2xx body whose media type matches what the caller explicitly asked for is
+    by definition not "unexpected", so the binary guard lets it through — even
+    when it is textual (e.g. ``augment.parse_text`` asks for ``text/plain``).
+    This is the rule the old per-endpoint ``allowed_content_types`` allow-list
+    only gestured at; honoring ``Accept`` captures it once for every caller.
+    Supports ``*/*`` and ``type/*`` wildcards.
+    """
+    if request is None or not main_type:
+        return False
+    accept = request.headers.get("accept", "")
+    if not accept:
+        return False
+    accepted = {part.split(";", 1)[0].strip().lower() for part in accept.split(",")}
+    accepted.discard("")
+    if "*/*" in accepted or main_type in accepted:
+        return True
+    top = main_type.split("/", 1)[0]
+    return f"{top}/*" in accepted
+
+
+def _guard_binary_content_type(response: httpx.Response) -> None:
     """Raise if a binary request got a textual 2xx body instead of media bytes.
 
     Venice's VPS-backed video models answer ``/video/retrieve`` with a JSON
@@ -86,13 +106,17 @@ def _guard_binary_content_type(
     ``application/octet-stream``, …) and untyped/empty responses pass through
     untouched.
 
-    ``allowed_content_types`` is an allow-list of textual content types a
-    specific endpoint legitimately returns (e.g. ``augment.parse_text`` expects
-    ``text/plain``); those pass through while every other textual type still
-    raises.
+    A textual body whose content type the caller *asked for* via ``Accept`` (see
+    :func:`_request_accepts`) is not a corruption signal and passes through. To
+    let a new binary endpoint return text, advertise that type in its ``Accept``
+    header rather than special-casing it here. Opaque downloads that are not a
+    Venice API surface (presigned object-store URLs) skip this guard entirely —
+    see ``_request_bytes(..., guard_content_type=False)``.
     """
     main_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-    if main_type in allowed_content_types:
+    if not main_type:
+        return
+    if _request_accepts(response.request, main_type):
         return
     if main_type == "application/json":
         try:
@@ -276,7 +300,7 @@ class AsyncVeniceClient(_BaseClient):
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
         no_auth: bool = False,
-        allowed_content_types: tuple[str, ...] = (),
+        guard_content_type: bool = True,
     ) -> bytes:
         response = await self._send(
             method,
@@ -289,7 +313,8 @@ class AsyncVeniceClient(_BaseClient):
             accept="application/octet-stream",
             no_auth=no_auth,
         )
-        _guard_binary_content_type(response, allowed_content_types)
+        if guard_content_type:
+            _guard_binary_content_type(response)
         return response.content
 
     @asynccontextmanager
@@ -488,7 +513,7 @@ class VeniceClient(_BaseClient):
         files: Mapping[str, Any] | None = None,
         data: Mapping[str, Any] | None = None,
         no_auth: bool = False,
-        allowed_content_types: tuple[str, ...] = (),
+        guard_content_type: bool = True,
     ) -> bytes:
         response = self._send(
             method,
@@ -501,7 +526,8 @@ class VeniceClient(_BaseClient):
             accept="application/octet-stream",
             no_auth=no_auth,
         )
-        _guard_binary_content_type(response, allowed_content_types)
+        if guard_content_type:
+            _guard_binary_content_type(response)
         return response.content
 
     @contextmanager

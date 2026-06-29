@@ -97,8 +97,10 @@ class AsyncAugmentResource:
                 "/augment/text-parser",
                 files={"file": file_tuple},
                 data=form,
+                # Advertising text/plain both shapes the request and tells the
+                # binary guard this textual body is expected (not a stray error
+                # page). To accept more textual forms, widen this Accept header.
                 headers={"Accept": "text/plain"},
-                allowed_content_types=("text/plain",),
             )
         return raw.decode("utf-8")
 
@@ -164,8 +166,10 @@ class AugmentResource:
                 "/augment/text-parser",
                 files={"file": file_tuple},
                 data=form,
+                # Advertising text/plain both shapes the request and tells the
+                # binary guard this textual body is expected (not a stray error
+                # page). To accept more textual forms, widen this Accept header.
                 headers={"Accept": "text/plain"},
-                allowed_content_types=("text/plain",),
             )
         return raw.decode("utf-8")
 

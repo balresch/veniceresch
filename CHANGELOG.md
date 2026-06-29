@@ -5,6 +5,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Binary content-type guard no longer rejects real media or expected text.**
+  The 0.6.0 guard raised `VeniceUnexpectedContentTypeError` for *any* textual
+  2xx body on a binary request, which over-rejected two legitimate cases:
+  `video.download()` of a presigned/CDN URL (object stores routinely serve real
+  media as `text/plain` when no `Content-Type` metadata is set) and
+  `augment.parse_text` (locked to `text/plain` only). The guard now honors the
+  request's `Accept` header — a body whose content type the caller explicitly
+  asked for is not "unexpected" and passes through (with `*/*` and `type/*`
+  wildcard support). `video.download()` fetches presigned URLs as opaque
+  downloads that skip the guard entirely (a presigned URL is an object-store
+  handle, not a Venice API surface). Genuine error pages on binary endpoints
+  (a `text/html` body where only media was requested) still fail loudly, so the
+  original silent-corruption protection is intact. The single-consumer
+  `allowed_content_types` parameter on the internal `_request_bytes` helper is
+  removed in favor of the `Accept`-header rule.
+- **`wait_for_completion`'s in-progress check is now case-insensitive.**
+  `video.wait_for_completion` / `audio.wait_for_completion` (async and sync)
+  compared the poll status against an exact-match uppercase `"PROCESSING"`, so a
+  `"processing"` / `"Processing"` variant looked terminal and could end the wait
+  mid-job (the caller then downloaded an unfinished asset). The in-progress
+  comparison is now case-insensitive, matching the already case-insensitive
+  failure check in the same method. The set of statuses treated as *terminal* is
+  unchanged ("anything not processing"), so tolerance of unknown terminal
+  statuses is preserved.
+
 ## [0.6.0] — 2026-06-29
 
 ### Added

@@ -90,13 +90,23 @@ async def test_parse_text_returns_string_and_sets_accept(mock_api, async_client)
 
 
 async def test_parse_text_raises_on_unexpected_textual_body(mock_api, async_client):
-    # parse_text allow-lists text/plain only; an HTML body (e.g. an auth-proxy
-    # interstitial) is still surfaced loudly rather than decoded as document text.
+    # parse_text only advertises Accept: text/plain, so the binary guard treats a
+    # text/html body (e.g. an auth-proxy interstitial) as unexpected and surfaces
+    # it loudly rather than decoding it as document text.
     mock_api.post("/augment/text-parser").respond(
         200, content=b"<html>login</html>", headers={"content-type": "text/html"}
     )
     with pytest.raises(VeniceUnexpectedContentTypeError):
         await async_client.augment.parse_text(file=b"doc")
+
+
+def test_sync_parse_text_returns_string(mock_api, sync_client):
+    route = mock_api.post("/augment/text-parser").respond(
+        200, text="plain body", content_type="text/plain"
+    )
+    result = sync_client.augment.parse_text(file=b"doc")
+    assert result == "plain body"
+    assert route.calls.last.request.headers["accept"] == "text/plain"
 
 
 async def test_parse_accepts_path(mock_api, async_client, tmp_path):

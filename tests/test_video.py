@@ -167,6 +167,43 @@ def test_sync_download_vps_model(mock_api, sync_client):
     assert sync_client.video.download(model="v1", queue_id="q-123") == b"REALMP4"
 
 
+@pytest.mark.parametrize("content_type", ["text/plain", "text/html", "application/xml"])
+async def test_download_presigned_url_returns_textual_labeled_media(
+    mock_api, async_client, content_type
+):
+    # Object stores routinely serve real media as text/plain when no Content-Type
+    # metadata is set. A presigned URL is an opaque download, not a Venice API
+    # surface, so download() must return the bytes rather than raise.
+    mock_api.get(_VPS_STATUS["download_url"]).respond(
+        200, content=b"REALMP4", headers={"content-type": content_type}
+    )
+    result = await async_client.video.download(
+        model="v1", queue_id="q-123", download_url=_VPS_STATUS["download_url"]
+    )
+    assert result == b"REALMP4"
+
+
+def test_sync_download_presigned_url_returns_textual_labeled_media(mock_api, sync_client):
+    mock_api.get(_VPS_STATUS["download_url"]).respond(
+        200, content=b"REALMP4", headers={"content-type": "text/plain"}
+    )
+    result = sync_client.video.download(
+        model="v1", queue_id="q-123", download_url=_VPS_STATUS["download_url"]
+    )
+    assert result == b"REALMP4"
+
+
+async def test_download_vps_fallback_url_returns_textual_labeled_media(mock_api, async_client):
+    # The /video/retrieve JSON fallback path also fetches the download_url as an
+    # opaque object — a text/plain label there must not reopen the guard.
+    mock_api.post("/video/retrieve").respond(200, json=_VPS_STATUS)
+    mock_api.get(_VPS_STATUS["download_url"]).respond(
+        200, content=b"REALMP4", headers={"content-type": "text/plain"}
+    )
+    result = await async_client.video.download(model="v1", queue_id="q-123")
+    assert result == b"REALMP4"
+
+
 async def test_quote(mock_api, async_client):
     # Swagger calls this field "quote"; test uses the name Venice returns.
     # Any additional fields Venice adds (e.g. price_usd) land on model_extra.
@@ -240,6 +277,40 @@ async def test_wait_raises_on_timeout(async_client, mock_api):
             poll_interval_s=0.01,
         )
     assert info.value.queue_id == "q-timeout"
+
+
+async def test_wait_keeps_polling_on_lowercase_processing(async_client, mock_api):
+    # A non-uppercase in-progress status must not look terminal and end the wait
+    # mid-job; the loop keeps polling until a genuinely terminal status arrives.
+    request_list = []
+
+    def handler(request):
+        request_list.append(request)
+        status = "Processing" if len(request_list) < 3 else "COMPLETED"
+        return httpx.Response(200, json={"status": status})
+
+    mock_api.post("/video/retrieve").mock(side_effect=handler)
+    result = await async_client.video.wait_for_completion(
+        model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01
+    )
+    assert result.status == "COMPLETED"
+    assert len(request_list) == 3
+
+
+def test_sync_wait_keeps_polling_on_lowercase_processing(sync_client, mock_api):
+    request_list = []
+
+    def handler(request):
+        request_list.append(request)
+        status = "processing" if len(request_list) < 3 else "COMPLETED"
+        return httpx.Response(200, json={"status": status})
+
+    mock_api.post("/video/retrieve").mock(side_effect=handler)
+    result = sync_client.video.wait_for_completion(
+        model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01
+    )
+    assert result.status == "COMPLETED"
+    assert len(request_list) == 3
 
 
 async def test_wait_returns_failed_status_by_default(async_client, mock_api):
