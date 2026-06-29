@@ -13,11 +13,15 @@ Image inputs accept :class:`bytes` (raw image data — we base64-encode for you)
 Unlike the multipart audio/augment uploads, these endpoints take base64 in a
 JSON body, so the bytes must be fully buffered in memory to encode them — there
 is no streaming path here. Pass an ``https://`` URL (or, where supported,
-``image_url=``) to avoid uploading large local files at all.
+``image_url=``) to avoid uploading large local files at all. On the async
+surface the blocking read + base64 of a path / file-like input is offloaded to
+a worker thread (see :func:`_encode_image_async`) so the event loop is not
+stalled for the duration of the read.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
@@ -45,6 +49,19 @@ def _encode_image(image: ImageInput) -> str:
     if isinstance(image, str):
         return image  # already base64, a data URL, or an https://... URL
     return base64.b64encode(image.read()).decode("ascii")  # binary file-like
+
+
+async def _encode_image_async(image: ImageInput) -> str:
+    """Async :func:`_encode_image`: offload the blocking read off the loop.
+
+    A ``str`` needs no I/O (passed through) and ``bytes`` are already in memory
+    (encoded inline — nothing to offload). Only :class:`~pathlib.Path` /
+    file-like inputs do a blocking disk read, so those run the read + base64 in
+    a worker thread via :func:`asyncio.to_thread` rather than on the event loop.
+    """
+    if isinstance(image, (str, bytes)):
+        return _encode_image(image)
+    return await asyncio.to_thread(_encode_image, image)
 
 
 def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
@@ -97,7 +114,7 @@ class AsyncImageResource:
         """Edit an image with a text prompt. Returns raw PNG bytes."""
         body = _drop_none(
             {
-                "image": _encode_image(image),
+                "image": await _encode_image_async(image),
                 "prompt": prompt,
                 "model": model,
                 **extra,
@@ -119,7 +136,7 @@ class AsyncImageResource:
         """
         body = _drop_none(
             {
-                "images": [_encode_image(img) for img in images],
+                "images": [await _encode_image_async(img) for img in images],
                 "prompt": prompt,
                 "modelId": model_id,
                 **extra,
@@ -138,7 +155,7 @@ class AsyncImageResource:
         """Upscale an image. Returns raw PNG bytes."""
         body = _drop_none(
             {
-                "image": _encode_image(image),
+                "image": await _encode_image_async(image),
                 "scale": scale,
                 "enhance": enhance,
                 **extra,
@@ -160,7 +177,7 @@ class AsyncImageResource:
             raise ValueError("Must supply either image= or image_url=.")
         body: dict[str, Any] = {}
         if image is not None:
-            body["image"] = _encode_image(image)
+            body["image"] = await _encode_image_async(image)
         if image_url is not None:
             body["image_url"] = image_url
         return await self._client._request_bytes("POST", "/image/background-remove", json_body=body)

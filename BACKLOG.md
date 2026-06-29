@@ -716,7 +716,30 @@ raise the same typed-error hierarchy; public class names and re-exports unchange
 
 ---
 
-## 13. Offload blocking file reads off the async event loop on upload/encode paths  (0.6.0 #6, #7)  — TODO
+## 13. Offload blocking file reads off the async event loop on upload/encode paths  (0.6.0 #6, #7)  — DONE
+
+**Done (2026-06-29).** Took the preferred `asyncio.to_thread` read-to-bytes
+approach on the async surfaces only; sync paths and `bytes` inputs (already in
+memory) are untouched. Added `async_open_upload` to `resources/_uploads.py` — an
+`@asynccontextmanager` mirroring `open_upload`'s call shape that reads a path /
+caller-supplied handle in a worker thread and hands httpx the resulting `bytes`
+(giving up streaming on async, per the item's stated tradeoff, to keep the loop
+free); a caller handle is read but never closed. The two async audio methods
+(`create_cloned_voice`, `transcribe`) and the two async augment methods
+(`parse`, `parse_text`) now `async with async_open_upload(...)`. For images,
+added `_encode_image_async` (str passthrough, `bytes` encoded inline = nothing to
+offload, Path/file-like read+base64 via `to_thread`) and awaited it in the four
+async image methods (`edit`, `multi_edit`, `upscale`, `background_remove`).
+Updated the `_uploads.py` and `image.py` module docstrings to note the async read
+is offloaded and the streaming tradeoff. Tests: added six `async_open_upload`
+unit tests (`test_uploads.py`) mirroring the sync ones (bytes passthrough, path /
+str-path / file-like read-to-bytes, missing-path `FileNotFoundError`, caller
+handle not closed) and a path-input wire-parity test (`test_sync_async_parity.py`)
+proving the async read-to-bytes route and the sync handle-stream route produce a
+byte-identical multipart body. Existing image async path/file-like tests
+(`test_edit_reads_from_path`, `test_edit_reads_from_file_like`) confirm the encode
+offload produces identical base64. 289 tests pass; ruff + mypy clean. CHANGELOG
+"Fixed" entry added (real async behavioral fix, though wire output is unchanged).
 
 **Priority: medium, efficiency (CONFIRMED).** Introduced by item #5's
 file-like/streaming upload support: the streaming handle keeps disk I/O on the

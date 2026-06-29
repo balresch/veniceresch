@@ -17,7 +17,7 @@ from veniceresch.resources._polling import (
     is_failure_status,
     is_processing,
 )
-from veniceresch.resources._uploads import UploadInput, open_upload
+from veniceresch.resources._uploads import UploadInput, async_open_upload, open_upload
 from veniceresch.types import (
     AudioCompleteResponse,
     AudioQueueResponse,
@@ -118,7 +118,7 @@ class AsyncAudioResource:
             }
         )
         headers = {"SIGN-IN-WITH-X": siwx_header} if siwx_header is not None else None
-        with open_upload(file, default_name="audio.bin") as file_tuple:
+        async with async_open_upload(file, default_name="audio.bin") as file_tuple:
             raw = await self._client._request_json(
                 "POST",
                 "/audio/voices",
@@ -149,7 +149,7 @@ class AsyncAudioResource:
                 **{k: str(v) for k, v in extra.items() if v is not None},
             }
         )
-        with open_upload(file, default_name="audio.bin") as file_tuple:
+        async with async_open_upload(file, default_name="audio.bin") as file_tuple:
             raw = await self._client._request_json(
                 "POST",
                 "/audio/transcriptions",

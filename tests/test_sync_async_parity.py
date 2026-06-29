@@ -106,6 +106,23 @@ async def test_create_cloned_voice_multipart_parity(mock_api, async_client, sync
     assert fp["headers"]["authorization"].startswith("Bearer ")
 
 
+# ---- audio: path upload — async reads to bytes off-thread, sync streams ---
+
+
+async def test_create_cloned_voice_path_parity(mock_api, async_client, sync_client, tmp_path):
+    # A filesystem path takes different in-process routes on each surface
+    # (item #13): async reads it to bytes via asyncio.to_thread, sync streams an
+    # open handle. The multipart body on the wire must still be byte-identical.
+    route = mock_api.post("/audio/voices").respond(200, json={"id": "vv_3", "model": "tts"})
+    sample = tmp_path / "sample.wav"
+    sample.write_bytes(b"WAVE-SAMPLE-BYTES")
+    await async_client.audio.create_cloned_voice(file=sample, model="tts")
+    sync_client.audio.create_cloned_voice(file=sample, model="tts")
+    fp = _assert_parity(route)
+    assert b'filename="sample.wav"' in fp["content"]
+    assert b"WAVE-SAMPLE-BYTES" in fp["content"]
+
+
 # ---- audio: wallet auth strips bearer + sets SIGN-IN-WITH-X ---------------
 
 

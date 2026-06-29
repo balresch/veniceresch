@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from veniceresch.resources._uploads import UploadInput, open_upload
+from veniceresch.resources._uploads import UploadInput, async_open_upload, open_upload
 from veniceresch.types import (
     TextParserResponse,
     WebScrapeResponse,
@@ -75,7 +75,7 @@ class AsyncAugmentResource:
         """
         form = {"response_format": "json"}
         form.update({k: str(v) for k, v in extra.items() if v is not None})
-        with open_upload(file, default_name="document.bin") as file_tuple:
+        async with async_open_upload(file, default_name="document.bin") as file_tuple:
             raw = await self._client._request_json(
                 "POST",
                 "/augment/text-parser",
@@ -91,7 +91,7 @@ class AsyncAugmentResource:
         """
         form = {"response_format": "text"}
         form.update({k: str(v) for k, v in extra.items() if v is not None})
-        with open_upload(file, default_name="document.bin") as file_tuple:
+        async with async_open_upload(file, default_name="document.bin") as file_tuple:
             raw = await self._client._request_bytes(
                 "POST",
                 "/augment/text-parser",

@@ -18,6 +18,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Async uploads / image encodes no longer block the event loop on file reads.**
+  The 0.6.0 file-like upload support streamed a synchronous file handle into
+  httpx's async multipart encoder, which iterates it with blocking `.read()`
+  calls *inside* the request coroutine — so a large upload to `/audio/voices`,
+  `/audio/transcriptions`, or `/augment/text-parser` stalled every other
+  coroutine for the whole request. Likewise the image base64 endpoints
+  (`edit` / `multi_edit` / `upscale` / `background_remove`) did the path read +
+  base64 on the loop. The async surfaces now offload the blocking read (and, for
+  images, the base64) to a worker thread via `asyncio.to_thread` (new
+  `async_open_upload` helper in `resources/_uploads.py` and `_encode_image_async`
+  in `resources/image.py`). The async path trades streaming for a buffered read
+  to keep the loop free; the wire output is byte-identical. Sync surfaces are
+  unchanged, and `bytes` inputs stay zero-copy on both.
 - **Binary content-type guard no longer rejects real media or expected text.**
   The 0.6.0 guard raised `VeniceUnexpectedContentTypeError` for *any* textual
   2xx body on a binary request, which over-rejected two legitimate cases:
