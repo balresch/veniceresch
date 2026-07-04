@@ -44,12 +44,81 @@ async def test_generate_drops_return_binary(mock_api, async_client):
     assert "return_binary" not in body
 
 
+async def test_generate_forwards_all_official_parameters(mock_api, async_client):
+    route = mock_api.post("/image/generate").respond(200, json={"images": []})
+    await async_client.image.generate(
+        model="gpt-image-2",
+        prompt="a red cube",
+        cfg_scale=7.5,
+        embed_exif_metadata=True,
+        format="png",
+        height=1024,
+        hide_watermark=True,
+        lora_strength=50,
+        negative_prompt="blurry",
+        variants=3,
+        safe_mode=False,
+        seed=123456789,
+        steps=8,
+        style_preset="3D Model",
+        aspect_ratio="16:9",
+        resolution="2K",
+        quality="medium",
+        enable_web_search=True,
+        width=1024,
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "model": "gpt-image-2",
+        "prompt": "a red cube",
+        "cfg_scale": 7.5,
+        "embed_exif_metadata": True,
+        "format": "png",
+        "height": 1024,
+        "hide_watermark": True,
+        "lora_strength": 50,
+        "negative_prompt": "blurry",
+        "variants": 3,
+        "safe_mode": False,
+        "seed": 123456789,
+        "steps": 8,
+        "style_preset": "3D Model",
+        "aspect_ratio": "16:9",
+        "resolution": "2K",
+        "quality": "medium",
+        "enable_web_search": True,
+        "width": 1024,
+    }
+
+
 async def test_generate_binary_returns_bytes(mock_api, async_client):
     route = mock_api.post("/image/generate").respond(200, content=SAMPLE_BYTES)
     result = await async_client.image.generate_binary(model="m", prompt="p")
     assert result == SAMPLE_BYTES
     body = json.loads(route.calls.last.request.content)
     assert body["return_binary"] is True
+
+
+async def test_generate_binary_forwards_sizing_and_quality(mock_api, async_client):
+    route = mock_api.post("/image/generate").respond(200, content=SAMPLE_BYTES)
+    await async_client.image.generate_binary(
+        model="nano-banana-pro",
+        prompt="p",
+        aspect_ratio="1:1",
+        resolution="4K",
+        quality="high",
+        format="webp",
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "model": "nano-banana-pro",
+        "prompt": "p",
+        "format": "webp",
+        "aspect_ratio": "1:1",
+        "resolution": "4K",
+        "quality": "high",
+        "return_binary": True,
+    }
 
 
 # ---- edit ------------------------------------------------------------------

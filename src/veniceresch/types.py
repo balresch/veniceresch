@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from veniceresch._base_model import VeniceBaseModel
 from veniceresch._generated import (
@@ -125,11 +125,18 @@ class ModelList(VeniceBaseModel):
     def parsed_data(self) -> list[ModelResponse]:
         """Return ``.data`` elements as typed :class:`ModelResponse` objects.
 
-        Uses ``model_construct`` so unknown fields land on
-        ``.model_extra`` rather than raising — drift-tolerant with
-        attribute access on the known fields.
+        Full model-list records are validated so nested metadata like
+        ``model_spec.constraints`` and ``model_spec.pricing`` gets typed too.
+        Incomplete records still fall back to ``model_construct`` so mocks or
+        partially returned records remain accessible.
         """
-        return [ModelResponse.model_construct(**item) for item in self.data]
+        parsed: list[ModelResponse] = []
+        for item in self.data:
+            try:
+                parsed.append(ModelResponse.model_validate(item))
+            except ValidationError:
+                parsed.append(ModelResponse.model_construct(**item))
+        return parsed
 
 
 class ModelTraitsResponse(VeniceBaseModel):

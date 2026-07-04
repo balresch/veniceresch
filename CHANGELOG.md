@@ -3,6 +3,22 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.6.2] — 2026-07-04
+
+### Added
+
+- **Image generation now exposes all current Venice text-to-image parameters as
+  first-class kwargs.** `image.generate` and `image.generate_binary` now list the
+  current `/image/generate` request fields explicitly, including
+  `aspect_ratio`, `resolution`, `quality`, and `enable_web_search`, while still
+  accepting `**extra` for future API additions.
+- **Typed model metadata now includes nested image constraints and pricing.**
+  `models.list(type="image").parsed_data()` now validates complete model
+  records so `model_spec.constraints` and `model_spec.pricing` expose supported
+  aspect ratios, resolutions, quality tiers, defaults, and price matrices as
+  typed nested objects. Incomplete records still fall back to the previous
+  drift-tolerant construction path.
+
 ## [0.6.1] — 2026-06-29
 
 ### Added

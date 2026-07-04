@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any, Literal
 
 from veniceresch.types import GenerateImageResponse, ImageStylesResponse
 
@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 
 
 ImageInput = bytes | str | Path | IO[bytes]
+ImageFormat = Literal["jpeg", "png", "webp"]
+ImageQuality = Literal["low", "medium", "high"]
 
 
 def _encode_image(image: ImageInput) -> str:
@@ -68,6 +70,57 @@ def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
+def _build_generate_body(
+    *,
+    model: str,
+    prompt: str,
+    cfg_scale: float | None = None,
+    embed_exif_metadata: bool | None = None,
+    format: ImageFormat | None = None,
+    height: int | None = None,
+    hide_watermark: bool | None = None,
+    lora_strength: int | None = None,
+    negative_prompt: str | None = None,
+    variants: int | None = None,
+    safe_mode: bool | None = None,
+    seed: int | None = None,
+    steps: int | None = None,
+    style_preset: str | None = None,
+    aspect_ratio: str | None = None,
+    resolution: str | None = None,
+    quality: ImageQuality | None = None,
+    enable_web_search: bool | None = None,
+    width: int | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    body = _drop_none(
+        {
+            "model": model,
+            "prompt": prompt,
+            "cfg_scale": cfg_scale,
+            "embed_exif_metadata": embed_exif_metadata,
+            "format": format,
+            "height": height,
+            "hide_watermark": hide_watermark,
+            "lora_strength": lora_strength,
+            "negative_prompt": negative_prompt,
+            "variants": variants,
+            "safe_mode": safe_mode,
+            "seed": seed,
+            "steps": steps,
+            "style_preset": style_preset,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "quality": quality,
+            "enable_web_search": enable_web_search,
+            "width": width,
+        }
+    )
+    if extra:
+        body.update(_drop_none(extra))
+    return body
+
+
 class AsyncImageResource:
     """Async image resource. Accessed via ``client.image``."""
 
@@ -79,6 +132,23 @@ class AsyncImageResource:
         *,
         model: str,
         prompt: str,
+        cfg_scale: float | None = None,
+        embed_exif_metadata: bool | None = None,
+        format: ImageFormat | None = None,
+        height: int | None = None,
+        hide_watermark: bool | None = None,
+        lora_strength: int | None = None,
+        negative_prompt: str | None = None,
+        variants: int | None = None,
+        safe_mode: bool | None = None,
+        seed: int | None = None,
+        steps: int | None = None,
+        style_preset: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: ImageQuality | None = None,
+        enable_web_search: bool | None = None,
+        width: int | None = None,
         **extra: Any,
     ) -> GenerateImageResponse:
         """Generate an image. Returns :class:`GenerateImageResponse` with
@@ -86,7 +156,28 @@ class AsyncImageResource:
 
         For raw PNG/JPEG bytes, use :meth:`generate_binary`.
         """
-        body = _drop_none({"model": model, "prompt": prompt, **extra})
+        body = _build_generate_body(
+            model=model,
+            prompt=prompt,
+            cfg_scale=cfg_scale,
+            embed_exif_metadata=embed_exif_metadata,
+            format=format,
+            height=height,
+            hide_watermark=hide_watermark,
+            lora_strength=lora_strength,
+            negative_prompt=negative_prompt,
+            variants=variants,
+            safe_mode=safe_mode,
+            seed=seed,
+            steps=steps,
+            style_preset=style_preset,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            quality=quality,
+            enable_web_search=enable_web_search,
+            width=width,
+            extra=extra,
+        )
         body.pop("return_binary", None)  # force JSON mode on this method
         raw = await self._client._request_json("POST", "/image/generate", json_body=body)
         return GenerateImageResponse.model_validate(raw)
@@ -96,10 +187,48 @@ class AsyncImageResource:
         *,
         model: str,
         prompt: str,
+        cfg_scale: float | None = None,
+        embed_exif_metadata: bool | None = None,
+        format: ImageFormat | None = None,
+        height: int | None = None,
+        hide_watermark: bool | None = None,
+        lora_strength: int | None = None,
+        negative_prompt: str | None = None,
+        variants: int | None = None,
+        safe_mode: bool | None = None,
+        seed: int | None = None,
+        steps: int | None = None,
+        style_preset: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: ImageQuality | None = None,
+        enable_web_search: bool | None = None,
+        width: int | None = None,
         **extra: Any,
     ) -> bytes:
         """Generate an image and return raw image bytes (PNG/JPEG/WebP)."""
-        body = _drop_none({"model": model, "prompt": prompt, **extra})
+        body = _build_generate_body(
+            model=model,
+            prompt=prompt,
+            cfg_scale=cfg_scale,
+            embed_exif_metadata=embed_exif_metadata,
+            format=format,
+            height=height,
+            hide_watermark=hide_watermark,
+            lora_strength=lora_strength,
+            negative_prompt=negative_prompt,
+            variants=variants,
+            safe_mode=safe_mode,
+            seed=seed,
+            steps=steps,
+            style_preset=style_preset,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            quality=quality,
+            enable_web_search=enable_web_search,
+            width=width,
+            extra=extra,
+        )
         body["return_binary"] = True
         return await self._client._request_bytes("POST", "/image/generate", json_body=body)
 
@@ -194,14 +323,102 @@ class ImageResource:
     def __init__(self, client: VeniceClient) -> None:
         self._client = client
 
-    def generate(self, *, model: str, prompt: str, **extra: Any) -> GenerateImageResponse:
-        body = _drop_none({"model": model, "prompt": prompt, **extra})
+    def generate(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        cfg_scale: float | None = None,
+        embed_exif_metadata: bool | None = None,
+        format: ImageFormat | None = None,
+        height: int | None = None,
+        hide_watermark: bool | None = None,
+        lora_strength: int | None = None,
+        negative_prompt: str | None = None,
+        variants: int | None = None,
+        safe_mode: bool | None = None,
+        seed: int | None = None,
+        steps: int | None = None,
+        style_preset: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: ImageQuality | None = None,
+        enable_web_search: bool | None = None,
+        width: int | None = None,
+        **extra: Any,
+    ) -> GenerateImageResponse:
+        body = _build_generate_body(
+            model=model,
+            prompt=prompt,
+            cfg_scale=cfg_scale,
+            embed_exif_metadata=embed_exif_metadata,
+            format=format,
+            height=height,
+            hide_watermark=hide_watermark,
+            lora_strength=lora_strength,
+            negative_prompt=negative_prompt,
+            variants=variants,
+            safe_mode=safe_mode,
+            seed=seed,
+            steps=steps,
+            style_preset=style_preset,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            quality=quality,
+            enable_web_search=enable_web_search,
+            width=width,
+            extra=extra,
+        )
         body.pop("return_binary", None)
         raw = self._client._request_json("POST", "/image/generate", json_body=body)
         return GenerateImageResponse.model_validate(raw)
 
-    def generate_binary(self, *, model: str, prompt: str, **extra: Any) -> bytes:
-        body = _drop_none({"model": model, "prompt": prompt, **extra})
+    def generate_binary(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        cfg_scale: float | None = None,
+        embed_exif_metadata: bool | None = None,
+        format: ImageFormat | None = None,
+        height: int | None = None,
+        hide_watermark: bool | None = None,
+        lora_strength: int | None = None,
+        negative_prompt: str | None = None,
+        variants: int | None = None,
+        safe_mode: bool | None = None,
+        seed: int | None = None,
+        steps: int | None = None,
+        style_preset: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: ImageQuality | None = None,
+        enable_web_search: bool | None = None,
+        width: int | None = None,
+        **extra: Any,
+    ) -> bytes:
+        body = _build_generate_body(
+            model=model,
+            prompt=prompt,
+            cfg_scale=cfg_scale,
+            embed_exif_metadata=embed_exif_metadata,
+            format=format,
+            height=height,
+            hide_watermark=hide_watermark,
+            lora_strength=lora_strength,
+            negative_prompt=negative_prompt,
+            variants=variants,
+            safe_mode=safe_mode,
+            seed=seed,
+            steps=steps,
+            style_preset=style_preset,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            quality=quality,
+            enable_web_search=enable_web_search,
+            width=width,
+            extra=extra,
+        )
         body["return_binary"] = True
         return self._client._request_bytes("POST", "/image/generate", json_body=body)
 
@@ -279,4 +496,4 @@ class ImageResource:
         return ImageStylesResponse.model_validate(raw)
 
 
-__all__ = ["AsyncImageResource", "ImageInput", "ImageResource"]
+__all__ = ["AsyncImageResource", "ImageFormat", "ImageInput", "ImageQuality", "ImageResource"]
