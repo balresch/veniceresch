@@ -550,6 +550,7 @@ ruff check . && ruff format --check .
 mypy src/veniceresch
 pytest                                    # unit tests (offline, respx-mocked)
 VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
+VENICE_API_KEY=... VENICE_INTEGRATION_PAID=1 pytest tests/integration -m integration  # + billed jobs
 ```
 
 ## Endpoint coverage

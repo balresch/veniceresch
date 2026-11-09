@@ -58,7 +58,7 @@ Generated response types used directly by resources (`BillingBalanceResponse`, `
 - Lint/format: `ruff check .` / `ruff format .`
 - Type check: `mypy src/veniceresch` (strict, excludes `_generated.py`)
 - Unit tests (offline, respx-mocked): `pytest` — integration tests are excluded by default via `addopts --ignore=tests/integration`.
-- Integration smoke (hits real API): `VENICE_API_KEY=... pytest tests/integration -m integration`
+- Integration smoke (hits real API): `VENICE_API_KEY=... pytest tests/integration -m integration`. Free/token-cheap checks run by default; tests billed per job (voice-changer round trip, min. 1 minute) also need `VENICE_INTEGRATION_PAID=1` (the `paid` input on the manual `integration.yml` dispatch; the weekly schedule never sets it). New endpoints should get at least a free-tier live check here — the mocked suite can't catch wire drift.
 - Single test: `pytest tests/test_chat.py::test_name`
 - Install in editable mode: `pip install -e ".[dev]"` — and check it actually is: a stale non-editable copy in site-packages silently shadows `src/` and makes pytest test the old release (`python -c "import veniceresch; print(veniceresch.__file__)"` must point into `src/`).
 - Build dists locally: `python -m build` → `python -m twine check dist/*` (mirrors what CI does).
