@@ -189,10 +189,21 @@ non-PROCESSING status (so unknown terminal statuses are tolerated). Pass
 `VeniceAudioFailedError` on a known failure status (`FAILED`, `CANCELLED`,
 `ERROR`); the final response is on the error's `.result`.
 
-Queue / retrieve / quote / complete / transcribe all return typed
+Queue / retrieve / quote / complete all return typed
 Pydantic models (`VideoQueueResponse`, `VideoRetrieveResponse`, etc.).
 Attribute access everywhere — ``queued.queue_id`` and
 ``result.status``, not dict indexing.
+
+`model` is optional on the follow-up calls (`retrieve`, `complete`,
+`download`, `wait_for_completion`) — Venice resolves the job from `queue_id`.
+`prompt` is optional on `queue`, for enhancement/upscale models (e.g. Topaz)
+that take a `video_url` plus `enhancement_model`, `target_fps`,
+`slowdown_factor`, … (all forwarded via `**extra`).
+
+`video.transcribe()` is **deprecated**: Venice retired `/video/transcriptions`
+(HTTP 410). It now raises `VeniceGoneError` without a network call. For video
+analysis use `chat.create(...)` with a `video_url` content part on a model
+whose `model_spec.capabilities.supportsVideoInput` is true.
 
 ## Audio: TTS, transcription, queued generation
 
@@ -228,13 +239,52 @@ mp3 = await client.audio.create_speech(
 )
 ```
 
+**Voice changer (speech-to-speech).** `client.audio.voice_changer` re-records
+a source recording in another voice, preserving delivery and timing. Pass
+exactly one of `file=` (multipart upload) or `audio_url=`. Its retrieve returns
+JSON while running and the audio bytes when done; the SDK folds both into
+`VoiceChangerRetrieveResponse` (`.status`, `.audio`, `.audio_format`, …):
+
+```python
+quote = await client.audio.voice_changer.quote(model="vc-model", duration_seconds=90)
+job = await client.audio.voice_changer.queue(
+    model="vc-model", file=Path("take.wav"), voice="aria", remove_background_noise=True,
+)
+done = await client.audio.voice_changer.wait_for_completion(
+    model="vc-model", queue_id=job.queue_id, delete_media_on_completion=True,
+)
+Path("converted.mp3").write_bytes(done.audio)
+```
+
+A queued conversion is charged immediately — if the `queue` response is lost,
+poll `retrieve` rather than queueing again.
+
 ## Models / embeddings / billing
 
 ```python
 models = await client.models.list(type="video")
 emb = await client.embeddings.create(input="hello", model="embed-v1")
 balance = await client.billing.balance()
+
+# Usage ledger: cursor-paginated, ascending by timestamp.
+async for entry in client.billing.iter_usage_history(
+    currency="USD", start_timestamp=datetime(2026, 10, 1, tzinfo=timezone.utc),
+):
+    print(entry["timestamp"], entry["sku"], entry["amount"])
+
+# One page at a time (filters on the first call, then only the cursor):
+page = await client.billing.usage_history(page_size=500)
+if page.nextCursor:
+    page = await client.billing.usage_history(cursor=page.nextCursor)
+
+# CSV export of a page; the next cursor comes from the x-next-cursor header.
+csv_page = await client.billing.usage_history_csv(currency="DIEM")
 ```
+
+`billing.usage()` / `iter_usage()` are **deprecated**: Venice sunset
+`/billing/usage` on 2026-09-16 (HTTP 410). They raise `VeniceGoneError`
+without a network call. Migrate `page`/`limit` → `page_size` + cursor and
+`start_date`/`end_date` → `start_timestamp`/`end_timestamp`.
 
 ## Augment: scrape, search, parse
 
@@ -249,6 +299,31 @@ print(parsed.text, parsed.tokens)
 # Plain-text form returns a str directly (Accept: text/plain)
 raw_text = await client.augment.parse_text(file=Path("doc.pdf"))
 ```
+
+## Decisions (beta)
+
+`client.decisions.create(...)` evaluates a `state` (a string, or structured
+JSON such as a chat log) against a map of typed questions and returns one
+structured answer per key — typed judgments, not generated text. Question
+types: `noul` (yes/no probability), `choice` (one option + full distribution)
+and `score` (position on an ordered rubric). Venice marks the endpoint beta,
+so answers are plain dicts.
+
+```python
+result = await client.decisions.create(
+    model="jev-latest",
+    state=[{"role": "user", "content": "BUY NOW!!! limited offer"}],
+    questions={
+        "is_spam": {"type": "noul", "instructions": "Is this message spam?"},
+        "tone": {"type": "choice", "instructions": "Tone?",
+                 "criteria": {"angry": None, "calm": None, "excited": None}},
+    },
+)
+print(result.answers["is_spam"]["noul"], result.answers["tone"]["choice"])
+```
+
+List decision models with `client.models.list(type="decision")`. Upstream's
+`/systemone` path is an alias of `/decisions`; the SDK calls `/decisions`.
 
 ## Characters
 
@@ -284,6 +359,17 @@ print(created.data["apiKey"])  # only returned once — save it now
 
 await client.api_keys.update(id="k1", description="renamed")
 await client.api_keys.delete("k1")
+
+# Access controls (create / update / generate_web3_key):
+await client.api_keys.create(
+    api_key_type="INFERENCE",
+    description="locked-down bot",
+    consumption_limit={"usd": 20},
+    limit_period="MONTH",            # EPOCH (daily, default) | MONTH | LIFETIME
+    model_privacy="PRIVATE_ONLY",    # ALL | PRIVATE_TEXT | PRIVATE_ONLY
+    ip_allowlist=["203.0.113.7", "10.0.0.0/8"],
+)
+await client.api_keys.update(id="k1", ip_allowlist=[])  # [] clears the allowlist
 
 limits = await client.api_keys.rate_limits()
 exceedances = await client.api_keys.rate_limits_log()
@@ -382,9 +468,9 @@ async for page in client.x402.iter_transactions(
 
 The same pattern works for `client.characters.iter_list(...)`,
 `client.characters.iter_reviews(slug)`, and
-`client.billing.iter_usage(...)`. No HTTP request fires until iteration
-starts. The single-page methods (`transactions`, `list`, `reviews`,
-`usage`) still work unchanged.
+`client.billing.iter_usage_history(...)` (cursor-based). No HTTP request
+fires until iteration starts. The single-page methods (`transactions`,
+`list`, `reviews`, `usage_history`) still work unchanged.
 
 ## Error handling
 
@@ -399,11 +485,14 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 | `VeniceX402PaymentRequiredError` | 402 from an x402 endpoint — body is an x402 discovery payload (`x402_version`, `accepts`), not an error |
 | `VeniceValidationError` | 400 / 422 — bad request shape |
 | `VeniceProviderContentPolicyError` | 422 — upstream provider rejected on content policy (`recommended_model`, `credits_refunded`); detected by body shape |
+| `VenicePermissionError` | 403 — authenticated but not allowed (e.g. key's `ip_allowlist` excludes the source IP) |
 | `VeniceNotFoundError` | 404 |
+| `VeniceConflictError` | 409 — e.g. `video.complete` before the media is ready |
+| `VeniceGoneError` | 410 — endpoint retired (`sunset`, `deprecation`, `link` from headers) |
 | `VenicePayloadTooLargeError` | 413 — request payload exceeds Venice's size limit |
 | `VeniceRateLimitError` | 429 |
 | `VeniceServerError` | 5xx |
-| `VeniceContentViolationError` | body contained `suggested_prompt` (any status) |
+| `VeniceContentViolationError` | body contained `suggested_prompt` (any status); image rejections may also set `recommended_model` and `retryable` |
 | `VeniceConnectionError` | DNS / TLS / connection reset / proxy failure |
 | `VeniceTimeoutError` | request or response timed out |
 
@@ -470,18 +559,21 @@ VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 | chat | `/chat/completions` | — |
 | responses | `/responses` (streaming + non-streaming) | — |
 | image | `/image/generate`, `/image/edit`, `/image/multi-edit`, `/image/upscale`, `/image/background-remove`, `/image/styles`, `/images/generations` (OpenAI alias via `client.images.generate`) | — |
-| video | `/video/queue`, `/video/retrieve`, `/video/quote`, `/video/complete`, `/video/transcriptions` | — |
-| audio | `/audio/speech`, `/audio/voices` (voice cloning), `/audio/transcriptions`, `/audio/queue`, `/audio/retrieve`, `/audio/quote`, `/audio/complete` | — |
+| video | `/video/queue`, `/video/retrieve`, `/video/quote`, `/video/complete` | `/video/transcriptions` retired upstream (410) — deprecated stub |
+| audio | `/audio/speech`, `/audio/voices` (voice cloning), `/audio/transcriptions`, `/audio/queue`, `/audio/retrieve`, `/audio/quote`, `/audio/complete`, `/audio/voice-changer/{queue,quote,retrieve,complete}` | — |
 | models | `/models`, `/models/traits`, `/models/compatibility_mapping` | — |
 | embeddings | `/embeddings` | — |
-| billing | `/billing/balance`, `/billing/usage`, `/billing/usage-analytics` | — |
+| billing | `/billing/balance`, `/billing/usage-history` (JSON + CSV), `/billing/usage-analytics` | `/billing/usage` sunset upstream (410) — deprecated stub |
+| decisions | `/decisions` (beta; `/systemone` is an upstream alias) | — |
 | augment | `/augment/scrape`, `/augment/search`, `/augment/text-parser` | — |
 | characters | `/characters`, `/characters/{slug}`, `/characters/{slug}/reviews` | — |
 | api_keys | `/api_keys` (list/create/update/delete), `/api_keys/{id}`, `/api_keys/rate_limits`, `/api_keys/rate_limits/log`, `/api_keys/generate_web3_key` (GET + POST) | — |
 | x402 | `/x402/balance/{walletAddress}`, `/x402/top-up`, `/x402/transactions/{walletAddress}` | — |
 | crypto | `/crypto/rpc/networks`, `/crypto/rpc/{network}` (JSON-RPC proxy) | — |
 
-All 44 paths in Venice's current OpenAPI spec are covered. The x402 and
+All 49 live paths in Venice's current OpenAPI spec (`20261108`) are covered
+(`/systemone` via its `/decisions` alias). The two retired paths keep
+deprecated stubs that raise `VeniceGoneError` and go away in 1.0. The x402 and
 web3 endpoints use wallet-based auth — this SDK accepts the signed header
 payloads you produce (SIWE / `X-402-Payment`) and forwards them verbatim;
 it does not bundle a wallet signer.

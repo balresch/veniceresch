@@ -221,40 +221,32 @@ async def test_iter_reviews_stops_on_total_pages(mock_api, async_client):
 # ---- billing.iter_usage (page-based, totalPages) ------------------------
 
 
-async def test_iter_usage_stops_on_total_pages(mock_api, async_client):
-    route = mock_api.get("/billing/usage").mock(
+async def test_iter_usage_history_follows_cursor(mock_api, async_client):
+    route = mock_api.get("/billing/usage-history").mock(
         side_effect=[
             httpx.Response(
-                200,
-                json={
-                    "data": [{"id": f"u{i}"} for i in range(200)],
-                    "pagination": {"limit": 200, "page": 1, "total": 350, "totalPages": 2},
-                },
+                200, json={"data": [{"id": f"u{i}"} for i in range(3)], "nextCursor": "c1"}
             ),
             httpx.Response(
-                200,
-                json={
-                    "data": [{"id": f"u{i}"} for i in range(200, 350)],
-                    "pagination": {"limit": 200, "page": 2, "total": 350, "totalPages": 2},
-                },
+                200, json={"data": [{"id": f"u{i}"} for i in range(3, 5)], "nextCursor": None}
             ),
         ]
     )
-    items = [u async for u in async_client.billing.iter_usage()]
-    assert len(items) == 350
+    pager = async_client.billing.iter_usage_history(currency="USD", page_size=10)
+    assert route.call_count == 0  # lazy until iteration
+    items = [u async for u in pager]
+    assert [u["id"] for u in items] == ["u0", "u1", "u2", "u3", "u4"]
     assert route.call_count == 2
-    assert route.calls[0].request.url.params["page"] == "1"
-    assert route.calls[1].request.url.params["page"] == "2"
+    # First page carries the filters; the continuation carries only the cursor.
+    assert dict(route.calls[0].request.url.params) == {"currency": "USD", "pageSize": "10"}
+    assert dict(route.calls[1].request.url.params) == {"cursor": "c1"}
 
 
-def test_iter_usage_sync(mock_api, sync_client):
-    route = mock_api.get("/billing/usage").respond(
-        200,
-        json={
-            "data": [{"id": "u1"}, {"id": "u2"}],
-            "pagination": {"limit": 200, "page": 1, "total": 2, "totalPages": 1},
-        },
+def test_iter_usage_history_sync_pages(mock_api, sync_client):
+    route = mock_api.get("/billing/usage-history").respond(
+        200, json={"data": [{"id": "u1"}, {"id": "u2"}], "nextCursor": None}
     )
-    items = list(sync_client.billing.iter_usage())
-    assert [u["id"] for u in items] == ["u1", "u2"]
+    pages = list(sync_client.billing.iter_usage_history().iter_pages())
+    assert len(pages) == 1
+    assert [u["id"] for u in pages[0].data] == ["u1", "u2"]
     assert route.call_count == 1

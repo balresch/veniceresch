@@ -1,27 +1,111 @@
-"""``/billing/*`` resource: balance, usage, usage analytics."""
+"""``/billing/*`` resource: balance, usage history, usage analytics.
+
+``/billing/usage`` (page-based) was sunset by Venice on 2026-09-16 and now
+answers every request with HTTP 410. Its replacement,
+``/billing/usage-history``, is a cursor walk: the first request carries the
+filters, each response carries a ``nextCursor``, and a continuation request
+sends *only* that cursor (the filters travel inside it). ``usage()`` /
+``iter_usage()`` are kept as deprecated stubs that raise
+:class:`~veniceresch._errors.VeniceGoneError` without a network call.
+"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import re
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, NoReturn
 
+from typing_extensions import deprecated
+
+from veniceresch._errors import VeniceGoneError
 from veniceresch.pagination import AsyncPaginator, Paginator
 from veniceresch.types import (
     BillingBalanceResponse,
     BillingUsageAnalyticsResponse,
-    BillingUsageResponse,
+    BillingUsageHistoryCsvPage,
+    BillingUsageHistoryResponse,
 )
 
 if TYPE_CHECKING:
+    import httpx
+
     from veniceresch._client import AsyncVeniceClient, VeniceClient
+
+
+_USAGE_HISTORY_PATH = "/billing/usage-history"
+_USAGE_GONE_MESSAGE = (
+    "GET /billing/usage was sunset by Venice on 2026-09-16 and no longer returns "
+    "data. Use billing.usage_history() / billing.iter_usage_history() instead: "
+    "replace page/limit with page_size plus the returned next cursor, and "
+    "start_date/end_date with start_timestamp/end_timestamp."
+)
+_FILENAME_RE = re.compile(r'filename="?([^";]+)"?')
+
+Timestamp = str | datetime
 
 
 def _clean_params(params: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in params.items() if v is not None}
 
 
-def _usage_items(page: BillingUsageResponse) -> list[dict[str, Any]]:
-    # ``usage`` is built via ``model_construct``, so fields hold raw JSON shapes.
-    # Normalize to plain dicts regardless of what landed there.
+def _usage_gone() -> NoReturn:
+    raise VeniceGoneError(
+        _USAGE_GONE_MESSAGE,
+        status_code=410,
+        error_body={"error": _USAGE_GONE_MESSAGE},
+        link=_USAGE_HISTORY_PATH,
+    )
+
+
+def _format_timestamp(value: Timestamp | None, name: str) -> str | None:
+    """Render a timestamp the way ``/billing/usage-history`` requires.
+
+    Venice wants ISO 8601 UTC with a ``Z`` suffix. Strings pass through
+    verbatim. Timezone-aware datetimes are converted to UTC and rendered with
+    ``Z`` (``datetime.isoformat()`` would emit ``+00:00``). Naive datetimes are
+    rejected rather than guessed at.
+    """
+    if value is None or isinstance(value, str):
+        return value
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(
+            f"{name} must be timezone-aware (e.g. datetime(..., tzinfo=timezone.utc)); "
+            "got a naive datetime."
+        )
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _usage_history_params(
+    *,
+    currency: str | None,
+    start_timestamp: Timestamp | None,
+    end_timestamp: Timestamp | None,
+    page_size: int | None,
+    cursor: str | None,
+) -> dict[str, Any]:
+    filters = _clean_params(
+        {
+            "currency": currency,
+            "startTimestamp": _format_timestamp(start_timestamp, "start_timestamp"),
+            "endTimestamp": _format_timestamp(end_timestamp, "end_timestamp"),
+            "pageSize": page_size,
+        }
+    )
+    if cursor is not None:
+        # Venice rejects filters sent alongside a cursor (they travel inside
+        # it); fail before the round-trip with a clearer message than a 400.
+        if filters:
+            raise ValueError(
+                "cursor= cannot be combined with filter arguments "
+                f"({', '.join(sorted(filters))}); the cursor already carries the "
+                "filters of the walk it continues."
+            )
+        return {"cursor": cursor}
+    return filters
+
+
+def _history_items(page: BillingUsageHistoryResponse) -> list[dict[str, Any]]:
+    # Built via ``model_construct``, so ``data`` holds raw JSON shapes.
     data: Any = getattr(page, "data", None)
     if not isinstance(data, list):
         return []
@@ -36,20 +120,23 @@ def _usage_items(page: BillingUsageResponse) -> list[dict[str, Any]]:
     return out
 
 
-def _usage_next(page: BillingUsageResponse, params: dict[str, Any]) -> dict[str, Any] | None:
-    pagination: Any = getattr(page, "pagination", None)
-    if hasattr(pagination, "model_dump"):
-        pagination = pagination.model_dump()
-    if not isinstance(pagination, dict):
-        pagination = {}
-    total_pages = pagination.get("totalPages")
-    current_page = pagination.get("page", params["page"])
-    if total_pages is not None and current_page >= total_pages:
-        return None
-    # Fallback for missing / unusual envelope: stop on short page.
-    if len(_usage_items(page)) < params["limit"]:
-        return None
-    return {"limit": params["limit"], "page": params["page"] + 1}
+def _history_next(
+    page: BillingUsageHistoryResponse, params: dict[str, Any]
+) -> dict[str, Any] | None:
+    cursor = getattr(page, "nextCursor", None)
+    if isinstance(cursor, str) and cursor:
+        return {"cursor": cursor}
+    return None
+
+
+def _csv_page(response: httpx.Response) -> BillingUsageHistoryCsvPage:
+    disposition = response.headers.get("content-disposition") or ""
+    match = _FILENAME_RE.search(disposition)
+    return BillingUsageHistoryCsvPage(
+        content=response.content,
+        next_cursor=response.headers.get("x-next-cursor") or None,
+        filename=match.group(1) if match else None,
+    )
 
 
 class AsyncBillingResource:
@@ -60,28 +147,101 @@ class AsyncBillingResource:
         raw = await self._client._request_json("GET", "/billing/balance")
         return BillingBalanceResponse.model_construct(**raw)
 
-    async def usage(
+    async def usage_history(
         self,
         *,
         currency: str | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        limit: int | None = None,
-        page: int | None = None,
-        sort_order: str | None = None,
-    ) -> BillingUsageResponse:
-        params = _clean_params(
-            {
-                "currency": currency,
-                "startDate": start_date,
-                "endDate": end_date,
-                "limit": limit,
-                "page": page,
-                "sortOrder": sort_order,
-            }
+        start_timestamp: Timestamp | None = None,
+        end_timestamp: Timestamp | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+    ) -> BillingUsageHistoryResponse:
+        """Fetch one page of ``GET /billing/usage-history``.
+
+        For the first page pass any filters (``currency``, ``start_timestamp``
+        inclusive, ``end_timestamp`` exclusive, ``page_size`` 10-1000). For
+        later pages pass *only* ``cursor=page.nextCursor`` — combining a cursor
+        with filters raises :class:`ValueError`. ``nextCursor`` is ``None`` on
+        the last page. Timestamps may be ISO 8601 strings or timezone-aware
+        :class:`~datetime.datetime` objects. Entries arrive in ascending
+        timestamp order. Prefer :meth:`iter_usage_history` to walk everything.
+        """
+        params = _usage_history_params(
+            currency=currency,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            page_size=page_size,
+            cursor=cursor,
         )
-        raw = await self._client._request_json("GET", "/billing/usage", params=params or None)
-        return BillingUsageResponse.model_construct(**raw)
+        raw = await self._client._request_json("GET", _USAGE_HISTORY_PATH, params=params or None)
+        return BillingUsageHistoryResponse.model_construct(**raw)
+
+    async def usage_history_csv(
+        self,
+        *,
+        currency: str | None = None,
+        start_timestamp: Timestamp | None = None,
+        end_timestamp: Timestamp | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+    ) -> BillingUsageHistoryCsvPage:
+        """Like :meth:`usage_history`, but returns the page as a CSV export.
+
+        The continuation token is read from the ``x-next-cursor`` response
+        header onto :attr:`BillingUsageHistoryCsvPage.next_cursor`.
+        """
+        params = _usage_history_params(
+            currency=currency,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            page_size=page_size,
+            cursor=cursor,
+        )
+        response = await self._client._send(
+            "GET",
+            _USAGE_HISTORY_PATH,
+            json_body=None,
+            params=params or None,
+            headers={"Accept": "text/csv"},
+        )
+        return _csv_page(response)
+
+    def iter_usage_history(
+        self,
+        *,
+        currency: str | None = None,
+        start_timestamp: Timestamp | None = None,
+        end_timestamp: Timestamp | None = None,
+        page_size: int | None = None,
+    ) -> AsyncPaginator[dict[str, Any], BillingUsageHistoryResponse]:
+        """Auto-paginated walk over ``/billing/usage-history``.
+
+        ``async for entry in client.billing.iter_usage_history(...)`` yields
+        every ledger entry; ``.iter_pages()`` yields each
+        :class:`BillingUsageHistoryResponse`. Follows ``nextCursor`` until it
+        is ``None``. Arguments are validated now; no HTTP call fires until
+        iteration starts.
+        """
+        initial = _usage_history_params(
+            currency=currency,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            page_size=page_size,
+            cursor=None,
+        )
+
+        async def _fetch(params: dict[str, Any]) -> BillingUsageHistoryResponse:
+            raw = await self._client._request_json(
+                "GET", _USAGE_HISTORY_PATH, params=params or None
+            )
+            return BillingUsageHistoryResponse.model_construct(**raw)
+
+        return AsyncPaginator(
+            fetch=_fetch,
+            initial_params=initial,
+            extract=_history_items,
+            step=_history_next,
+        )
 
     async def usage_analytics(
         self,
@@ -104,6 +264,28 @@ class AsyncBillingResource:
         )
         return BillingUsageAnalyticsResponse.model_construct(**raw)
 
+    @deprecated("billing.usage() is gone (Venice sunset /billing/usage); use usage_history()")
+    async def usage(
+        self,
+        *,
+        currency: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int | None = None,
+        page: int | None = None,
+        sort_order: str | None = None,
+    ) -> NoReturn:
+        """Deprecated: ``/billing/usage`` was sunset on 2026-09-16.
+
+        Always raises :class:`~veniceresch._errors.VeniceGoneError` (no
+        network call). Use :meth:`usage_history` / :meth:`iter_usage_history`.
+        Removed in 1.0.
+        """
+        _usage_gone()
+
+    @deprecated(
+        "billing.iter_usage() is gone (Venice sunset /billing/usage); use iter_usage_history()"
+    )
     def iter_usage(
         self,
         *,
@@ -112,31 +294,13 @@ class AsyncBillingResource:
         end_date: str | None = None,
         limit: int = 200,
         sort_order: str | None = None,
-    ) -> AsyncPaginator[dict[str, Any], BillingUsageResponse]:
-        """Auto-paginated iteration over ``/billing/usage``.
+    ) -> NoReturn:
+        """Deprecated: ``/billing/usage`` was sunset on 2026-09-16.
 
-        ``async for entry in client.billing.iter_usage()`` yields each
-        usage record across all pages. ``iter_pages()`` yields the
-        :class:`BillingUsageResponse` per page. No HTTP calls fire
-        until iteration starts.
+        Always raises :class:`~veniceresch._errors.VeniceGoneError` at call
+        time (no network call). Use :meth:`iter_usage_history`. Removed in 1.0.
         """
-
-        async def _fetch(params: dict[str, Any]) -> BillingUsageResponse:
-            return await self.usage(
-                currency=currency,
-                start_date=start_date,
-                end_date=end_date,
-                limit=params["limit"],
-                page=params["page"],
-                sort_order=sort_order,
-            )
-
-        return AsyncPaginator(
-            fetch=_fetch,
-            initial_params={"limit": limit, "page": 1},
-            extract=_usage_items,
-            step=_usage_next,
-        )
+        _usage_gone()
 
 
 class BillingResource:
@@ -147,28 +311,79 @@ class BillingResource:
         raw = self._client._request_json("GET", "/billing/balance")
         return BillingBalanceResponse.model_construct(**raw)
 
-    def usage(
+    def usage_history(
         self,
         *,
         currency: str | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        limit: int | None = None,
-        page: int | None = None,
-        sort_order: str | None = None,
-    ) -> BillingUsageResponse:
-        params = _clean_params(
-            {
-                "currency": currency,
-                "startDate": start_date,
-                "endDate": end_date,
-                "limit": limit,
-                "page": page,
-                "sortOrder": sort_order,
-            }
+        start_timestamp: Timestamp | None = None,
+        end_timestamp: Timestamp | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+    ) -> BillingUsageHistoryResponse:
+        """Sync mirror of :meth:`AsyncBillingResource.usage_history`."""
+        params = _usage_history_params(
+            currency=currency,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            page_size=page_size,
+            cursor=cursor,
         )
-        raw = self._client._request_json("GET", "/billing/usage", params=params or None)
-        return BillingUsageResponse.model_construct(**raw)
+        raw = self._client._request_json("GET", _USAGE_HISTORY_PATH, params=params or None)
+        return BillingUsageHistoryResponse.model_construct(**raw)
+
+    def usage_history_csv(
+        self,
+        *,
+        currency: str | None = None,
+        start_timestamp: Timestamp | None = None,
+        end_timestamp: Timestamp | None = None,
+        page_size: int | None = None,
+        cursor: str | None = None,
+    ) -> BillingUsageHistoryCsvPage:
+        """Sync mirror of :meth:`AsyncBillingResource.usage_history_csv`."""
+        params = _usage_history_params(
+            currency=currency,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            page_size=page_size,
+            cursor=cursor,
+        )
+        response = self._client._send(
+            "GET",
+            _USAGE_HISTORY_PATH,
+            json_body=None,
+            params=params or None,
+            headers={"Accept": "text/csv"},
+        )
+        return _csv_page(response)
+
+    def iter_usage_history(
+        self,
+        *,
+        currency: str | None = None,
+        start_timestamp: Timestamp | None = None,
+        end_timestamp: Timestamp | None = None,
+        page_size: int | None = None,
+    ) -> Paginator[dict[str, Any], BillingUsageHistoryResponse]:
+        """Sync mirror of :meth:`AsyncBillingResource.iter_usage_history`."""
+        initial = _usage_history_params(
+            currency=currency,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            page_size=page_size,
+            cursor=None,
+        )
+
+        def _fetch(params: dict[str, Any]) -> BillingUsageHistoryResponse:
+            raw = self._client._request_json("GET", _USAGE_HISTORY_PATH, params=params or None)
+            return BillingUsageHistoryResponse.model_construct(**raw)
+
+        return Paginator(
+            fetch=_fetch,
+            initial_params=initial,
+            extract=_history_items,
+            step=_history_next,
+        )
 
     def usage_analytics(
         self,
@@ -191,6 +406,23 @@ class BillingResource:
         )
         return BillingUsageAnalyticsResponse.model_construct(**raw)
 
+    @deprecated("billing.usage() is gone (Venice sunset /billing/usage); use usage_history()")
+    def usage(
+        self,
+        *,
+        currency: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int | None = None,
+        page: int | None = None,
+        sort_order: str | None = None,
+    ) -> NoReturn:
+        """Sync mirror of :meth:`AsyncBillingResource.usage` (deprecated)."""
+        _usage_gone()
+
+    @deprecated(
+        "billing.iter_usage() is gone (Venice sunset /billing/usage); use iter_usage_history()"
+    )
     def iter_usage(
         self,
         *,
@@ -199,25 +431,9 @@ class BillingResource:
         end_date: str | None = None,
         limit: int = 200,
         sort_order: str | None = None,
-    ) -> Paginator[dict[str, Any], BillingUsageResponse]:
-        """Sync mirror of :meth:`AsyncBillingResource.iter_usage`."""
-
-        def _fetch(params: dict[str, Any]) -> BillingUsageResponse:
-            return self.usage(
-                currency=currency,
-                start_date=start_date,
-                end_date=end_date,
-                limit=params["limit"],
-                page=params["page"],
-                sort_order=sort_order,
-            )
-
-        return Paginator(
-            fetch=_fetch,
-            initial_params={"limit": limit, "page": 1},
-            extract=_usage_items,
-            step=_usage_next,
-        )
+    ) -> NoReturn:
+        """Sync mirror of :meth:`AsyncBillingResource.iter_usage` (deprecated)."""
+        _usage_gone()
 
 
 __all__ = ["AsyncBillingResource", "BillingResource"]

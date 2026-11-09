@@ -194,3 +194,57 @@ def test_sync_list(mock_api, sync_client):
     mock_api.get("/api_keys").respond(200, json={"object": "list", "data": []})
     result = sync_client.api_keys.list()
     assert result.data == []
+
+
+async def test_create_sends_access_controls(mock_api, async_client):
+    import json as _json
+
+    route = mock_api.post("/api_keys").respond(200, json={"success": True, "data": {}})
+    await async_client.api_keys.create(
+        api_key_type="INFERENCE",
+        description="ci",
+        consumption_limit={"usd": 5},
+        limit_period="MONTH",
+        model_privacy="PRIVATE_ONLY",
+        ip_allowlist=("203.0.113.7", "2001:db8::/32"),
+    )
+    sent = _json.loads(route.calls.last.request.content)
+    assert sent["limitPeriod"] == "MONTH"
+    assert sent["modelPrivacy"] == "PRIVATE_ONLY"
+    assert sent["ipAllowlist"] == ["203.0.113.7", "2001:db8::/32"]
+
+
+def test_update_empty_allowlist_is_sent_to_clear_it(mock_api, sync_client):
+    import json as _json
+
+    route = mock_api.patch("/api_keys").respond(200, json={"success": True, "data": {}})
+    sync_client.api_keys.update(id="k1", ip_allowlist=[])
+    assert _json.loads(route.calls.last.request.content) == {"id": "k1", "ipAllowlist": []}
+
+
+def test_update_omits_unset_access_controls(mock_api, sync_client):
+    import json as _json
+
+    route = mock_api.patch("/api_keys").respond(200, json={"success": True, "data": {}})
+    sync_client.api_keys.update(id="k1", description="renamed")
+    assert _json.loads(route.calls.last.request.content) == {"id": "k1", "description": "renamed"}
+
+
+async def test_web3_create_sends_access_controls(mock_api, async_client):
+    import json as _json
+
+    route = mock_api.post("/api_keys/generate_web3_key").respond(
+        200, json={"success": True, "data": {}}
+    )
+    await async_client.api_keys.generate_web3_key(
+        api_key_type="INFERENCE",
+        address="0xabc",
+        signature="0xsig",
+        token="tok",
+        model_privacy="PRIVATE_TEXT",
+        limit_period="LIFETIME",
+    )
+    sent = _json.loads(route.calls.last.request.content)
+    assert sent["modelPrivacy"] == "PRIVATE_TEXT"
+    assert sent["limitPeriod"] == "LIFETIME"
+    assert "ipAllowlist" not in sent

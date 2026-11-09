@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import warnings
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, Literal
 
@@ -35,6 +37,17 @@ if TYPE_CHECKING:
 ImageInput = bytes | str | Path | IO[bytes]
 ImageFormat = Literal["jpeg", "png", "webp"]
 ImageQuality = Literal["low", "medium", "high"]
+# A bare image (encoded like any other ImageInput), or a mapping
+# ``{"image": ImageInput, "strength": float}`` (strength optional; only models
+# with ``supportsStyleReferenceStrength`` honour it).
+StyleReference = ImageInput | Mapping[str, Any]
+
+_ENHANCE_DEPRECATION = (
+    "image.upscale(enhance=...) is deprecated: Venice removed the enhance / "
+    "enhanceCreativity / enhancePrompt / replication fields from /image/upscale. "
+    "Use creativity= (0-0.02) instead. enhance= is still forwarded verbatim in "
+    "0.7 and will be removed in 1.0."
+)
 
 
 def _encode_image(image: ImageInput) -> str:
@@ -70,6 +83,51 @@ def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
+def _style_reference(ref: StyleReference, image: str) -> dict[str, Any]:
+    if isinstance(ref, Mapping):
+        return {**ref, "image": image}
+    return {"image": image}
+
+
+def _style_ref_image(ref: StyleReference) -> ImageInput:
+    if isinstance(ref, Mapping):
+        if "image" not in ref:
+            raise ValueError("style_references mappings need an 'image' key.")
+        img: ImageInput = ref["image"]
+        return img
+    return ref
+
+
+def _encode_style_refs(refs: Sequence[StyleReference] | None) -> list[dict[str, Any]] | None:
+    if refs is None:
+        return None
+    return [_style_reference(r, _encode_image(_style_ref_image(r))) for r in refs]
+
+
+async def _encode_style_refs_async(
+    refs: Sequence[StyleReference] | None,
+) -> list[dict[str, Any]] | None:
+    if refs is None:
+        return None
+    return [_style_reference(r, await _encode_image_async(_style_ref_image(r))) for r in refs]
+
+
+def _upscale_body(
+    image: str, scale: float | None, creativity: float | None, enhance: bool | None, extra: Any
+) -> dict[str, Any]:
+    if enhance is not None:
+        warnings.warn(_ENHANCE_DEPRECATION, DeprecationWarning, stacklevel=3)
+    return _drop_none(
+        {
+            "image": image,
+            "scale": scale,
+            "creativity": creativity,
+            "enhance": enhance,
+            **extra,
+        }
+    )
+
+
 def _build_generate_body(
     *,
     model: str,
@@ -91,6 +149,11 @@ def _build_generate_body(
     quality: ImageQuality | None = None,
     enable_web_search: bool | None = None,
     width: int | None = None,
+    transparent_background: bool | None = None,
+    enhance_prompt: bool | None = None,
+    disable_prompt_optimization_thinking: bool | None = None,
+    style_references: list[dict[str, Any]] | None = None,
+    anon_user_id: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     body = _drop_none(
@@ -114,6 +177,11 @@ def _build_generate_body(
             "quality": quality,
             "enable_web_search": enable_web_search,
             "width": width,
+            "transparent_background": transparent_background,
+            "enhance_prompt": enhance_prompt,
+            "disable_prompt_optimization_thinking": disable_prompt_optimization_thinking,
+            "style_references": style_references,
+            "anon_user_id": anon_user_id,
         }
     )
     if extra:
@@ -149,6 +217,11 @@ class AsyncImageResource:
         quality: ImageQuality | None = None,
         enable_web_search: bool | None = None,
         width: int | None = None,
+        transparent_background: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        style_references: Sequence[StyleReference] | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
     ) -> GenerateImageResponse:
         """Generate an image. Returns :class:`GenerateImageResponse` with
@@ -176,6 +249,11 @@ class AsyncImageResource:
             quality=quality,
             enable_web_search=enable_web_search,
             width=width,
+            transparent_background=transparent_background,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            style_references=await _encode_style_refs_async(style_references),
+            anon_user_id=anon_user_id,
             extra=extra,
         )
         body.pop("return_binary", None)  # force JSON mode on this method
@@ -204,6 +282,11 @@ class AsyncImageResource:
         quality: ImageQuality | None = None,
         enable_web_search: bool | None = None,
         width: int | None = None,
+        transparent_background: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        style_references: Sequence[StyleReference] | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
     ) -> bytes:
         """Generate an image and return raw image bytes (PNG/JPEG/WebP)."""
@@ -227,6 +310,11 @@ class AsyncImageResource:
             quality=quality,
             enable_web_search=enable_web_search,
             width=width,
+            transparent_background=transparent_background,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            style_references=await _encode_style_refs_async(style_references),
+            anon_user_id=anon_user_id,
             extra=extra,
         )
         body["return_binary"] = True
@@ -278,18 +366,18 @@ class AsyncImageResource:
         *,
         image: ImageInput,
         scale: float | None = None,
+        creativity: float | None = None,
         enhance: bool | None = None,
         **extra: Any,
     ) -> bytes:
-        """Upscale an image. Returns raw PNG bytes."""
-        body = _drop_none(
-            {
-                "image": await _encode_image_async(image),
-                "scale": scale,
-                "enhance": enhance,
-                **extra,
-            }
-        )
+        """Upscale an image. Returns raw PNG bytes.
+
+        ``creativity`` (Venice clamps it to 0-0.02, default 0.01) controls how
+        much detail and texture the upscaler adds. ``enhance`` is deprecated —
+        Venice dropped it from the endpoint; passing it emits a
+        :class:`DeprecationWarning` (it is still forwarded in 0.7).
+        """
+        body = _upscale_body(await _encode_image_async(image), scale, creativity, enhance, extra)
         return await self._client._request_bytes("POST", "/image/upscale", json_body=body)
 
     async def background_remove(
@@ -297,6 +385,8 @@ class AsyncImageResource:
         *,
         image: ImageInput | None = None,
         image_url: str | None = None,
+        anon_user_id: str | None = None,
+        **extra: Any,
     ) -> bytes:
         """Remove the background from an image. Returns raw PNG bytes.
 
@@ -309,6 +399,7 @@ class AsyncImageResource:
             body["image"] = await _encode_image_async(image)
         if image_url is not None:
             body["image_url"] = image_url
+        body.update(_drop_none({"anon_user_id": anon_user_id, **extra}))
         return await self._client._request_bytes("POST", "/image/background-remove", json_body=body)
 
     async def list_styles(self) -> ImageStylesResponse:
@@ -345,6 +436,11 @@ class ImageResource:
         quality: ImageQuality | None = None,
         enable_web_search: bool | None = None,
         width: int | None = None,
+        transparent_background: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        style_references: Sequence[StyleReference] | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
     ) -> GenerateImageResponse:
         body = _build_generate_body(
@@ -367,6 +463,11 @@ class ImageResource:
             quality=quality,
             enable_web_search=enable_web_search,
             width=width,
+            transparent_background=transparent_background,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            style_references=_encode_style_refs(style_references),
+            anon_user_id=anon_user_id,
             extra=extra,
         )
         body.pop("return_binary", None)
@@ -395,6 +496,11 @@ class ImageResource:
         quality: ImageQuality | None = None,
         enable_web_search: bool | None = None,
         width: int | None = None,
+        transparent_background: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        style_references: Sequence[StyleReference] | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
     ) -> bytes:
         body = _build_generate_body(
@@ -417,6 +523,11 @@ class ImageResource:
             quality=quality,
             enable_web_search=enable_web_search,
             width=width,
+            transparent_background=transparent_background,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            style_references=_encode_style_refs(style_references),
+            anon_user_id=anon_user_id,
             extra=extra,
         )
         body["return_binary"] = True
@@ -463,17 +574,12 @@ class ImageResource:
         *,
         image: ImageInput,
         scale: float | None = None,
+        creativity: float | None = None,
         enhance: bool | None = None,
         **extra: Any,
     ) -> bytes:
-        body = _drop_none(
-            {
-                "image": _encode_image(image),
-                "scale": scale,
-                "enhance": enhance,
-                **extra,
-            }
-        )
+        """Sync mirror of :meth:`AsyncImageResource.upscale`."""
+        body = _upscale_body(_encode_image(image), scale, creativity, enhance, extra)
         return self._client._request_bytes("POST", "/image/upscale", json_body=body)
 
     def background_remove(
@@ -481,6 +587,8 @@ class ImageResource:
         *,
         image: ImageInput | None = None,
         image_url: str | None = None,
+        anon_user_id: str | None = None,
+        **extra: Any,
     ) -> bytes:
         if image is None and image_url is None:
             raise ValueError("Must supply either image= or image_url=.")
@@ -489,6 +597,7 @@ class ImageResource:
             body["image"] = _encode_image(image)
         if image_url is not None:
             body["image_url"] = image_url
+        body.update(_drop_none({"anon_user_id": anon_user_id, **extra}))
         return self._client._request_bytes("POST", "/image/background-remove", json_body=body)
 
     def list_styles(self) -> ImageStylesResponse:
@@ -496,4 +605,11 @@ class ImageResource:
         return ImageStylesResponse.model_validate(raw)
 
 
-__all__ = ["AsyncImageResource", "ImageFormat", "ImageInput", "ImageQuality", "ImageResource"]
+__all__ = [
+    "AsyncImageResource",
+    "ImageFormat",
+    "ImageInput",
+    "ImageQuality",
+    "ImageResource",
+    "StyleReference",
+]

@@ -190,12 +190,26 @@ async def test_upscale_posts_binary_response(mock_api, async_client):
     result = await async_client.image.upscale(
         image=SAMPLE_BYTES,
         scale=2.0,
-        enhance=True,
+        creativity=0.015,
     )
     assert result == SAMPLE_BYTES
     body = json.loads(route.calls.last.request.content)
     assert body["scale"] == 2.0
-    assert body["enhance"] is True
+    assert body["creativity"] == 0.015
+    assert "enhance" not in body
+
+
+async def test_upscale_enhance_is_deprecated_but_forwarded(mock_api, async_client):
+    route = mock_api.post("/image/upscale").respond(200, content=SAMPLE_BYTES)
+    with pytest.warns(DeprecationWarning, match="creativity"):
+        await async_client.image.upscale(image=SAMPLE_BYTES, enhance=True)
+    assert json.loads(route.calls.last.request.content)["enhance"] is True
+
+
+def test_upscale_enhance_deprecated_sync(mock_api, sync_client):
+    mock_api.post("/image/upscale").respond(200, content=SAMPLE_BYTES)
+    with pytest.warns(DeprecationWarning):
+        sync_client.image.upscale(image=SAMPLE_BYTES, enhance=False)
 
 
 # ---- background_remove ----------------------------------------------------
@@ -249,3 +263,62 @@ def test_sync_image_multi_edit(mock_api, sync_client):
         model_id="m",
     )
     assert result == SAMPLE_BYTES
+
+
+# ---- 0.7.0 generate fields ---------------------------------------------------
+
+
+async def test_generate_forwards_new_fields_and_encodes_style_references(mock_api, async_client):
+    route = mock_api.post("/image/generate").respond(200, json={"images": []})
+    await async_client.image.generate(
+        model="flux-3",
+        prompt="a fox",
+        format="png",
+        transparent_background=True,
+        enhance_prompt=True,
+        disable_prompt_optimization_thinking=True,
+        anon_user_id="end-user-42",
+        style_references=[
+            SAMPLE_BYTES,
+            {"image": "https://example.com/style.png", "strength": 0.4},
+        ],
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body["transparent_background"] is True
+    assert body["enhance_prompt"] is True
+    assert body["disable_prompt_optimization_thinking"] is True
+    assert body["anon_user_id"] == "end-user-42"
+    assert body["style_references"] == [
+        {"image": base64.b64encode(SAMPLE_BYTES).decode()},
+        {"image": "https://example.com/style.png", "strength": 0.4},
+    ]
+
+
+def test_generate_binary_sync_encodes_style_reference_path(mock_api, sync_client, tmp_path):
+    ref = tmp_path / "style.png"
+    ref.write_bytes(SAMPLE_BYTES)
+    route = mock_api.post("/image/generate").respond(
+        200, content=SAMPLE_BYTES, headers={"Content-Type": "image/png"}
+    )
+    sync_client.image.generate_binary(
+        model="flux-3", prompt="a fox", style_references=[{"image": ref, "strength": 1.0}]
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body["style_references"] == [
+        {"image": base64.b64encode(SAMPLE_BYTES).decode(), "strength": 1.0}
+    ]
+    assert body["return_binary"] is True
+
+
+def test_style_reference_mapping_requires_image_key(sync_client):
+    with pytest.raises(ValueError, match="'image'"):
+        sync_client.image.generate(model="m", prompt="p", style_references=[{"strength": 1}])
+
+
+async def test_background_remove_forwards_anon_user_id(mock_api, async_client):
+    route = mock_api.post("/image/background-remove").respond(200, content=SAMPLE_BYTES)
+    await async_client.image.background_remove(image_url="https://x/pic.png", anon_user_id="u1")
+    assert json.loads(route.calls.last.request.content) == {
+        "image_url": "https://x/pic.png",
+        "anon_user_id": "u1",
+    }

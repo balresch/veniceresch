@@ -3,6 +3,83 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.0] — 2026-11-09
+
+Synced to Venice API spec `20261108` (was `20260617`). Coverage: all 49 live
+paths. Two endpoints Venice retired are kept as deprecated stubs and will be
+removed in 1.0.
+
+### Added
+
+- **`billing.usage_history()` / `iter_usage_history()` / `usage_history_csv()`**
+  for `GET /billing/usage-history`, the cursor-paginated replacement for
+  `/billing/usage`. The first page takes `currency`, `start_timestamp`
+  (inclusive), `end_timestamp` (exclusive) and `page_size` (10-1000);
+  continuations send only `cursor=page.nextCursor` (combining a cursor with
+  filters raises `ValueError` before the request). Timestamps accept ISO 8601
+  strings or timezone-aware `datetime`s (rendered as UTC with `Z`; naive
+  datetimes are rejected). `iter_usage_history` follows `nextCursor` until it
+  is `None`. `usage_history_csv` returns a `BillingUsageHistoryCsvPage`
+  (`content`, `next_cursor` from the `x-next-cursor` header, `filename`).
+- **`client.audio.voice_changer`** — speech-to-speech conversion over
+  `/audio/voice-changer/{queue,quote,retrieve,complete}`, plus
+  `wait_for_completion`. `queue` takes exactly one of `file=` (multipart) or
+  `audio_url=` (JSON). `retrieve` folds Venice's dual response (JSON while
+  processing, audio bytes when done) into one `VoiceChangerRetrieveResponse`
+  with the bytes on `.audio` and the `x-venice-*` headers parsed into fields.
+- **`client.decisions.create()`** (beta) for `POST /decisions`: evaluate a
+  `state` against typed `noul` / `choice` / `score` questions and get one
+  structured answer per key (`DecisionResponse`). `/systemone` is an upstream
+  alias and is not wrapped separately.
+- **New exceptions:** `VenicePermissionError` (403 — Venice now lists this on
+  every authenticated route for IP-restricted keys), `VeniceConflictError`
+  (409 — e.g. `video.complete` before the media is ready) and
+  `VeniceGoneError` (410, with `.sunset`, `.deprecation` and `.link` from the
+  response headers). All subclass `VeniceAPIError`; these statuses previously
+  raised the bare base class.
+- **`VeniceContentViolationError.recommended_model` / `.retryable`** from the
+  new image content-violation body.
+- **API key access controls:** `limit_period` (`EPOCH` / `MONTH` /
+  `LIFETIME`), `model_privacy` (`ALL` / `PRIVATE_TEXT` / `PRIVATE_ONLY`) and
+  `ip_allowlist` on `api_keys.create`, `update` and `generate_web3_key`. These
+  methods take no `**extra`, so the fields were previously unreachable;
+  `limitPeriod` had been in the spec since June. On `update`, `ip_allowlist=[]`
+  is sent so it clears the list.
+- **`image.generate` / `generate_binary`:** first-class `transparent_background`,
+  `enhance_prompt`, `disable_prompt_optimization_thinking`, `anon_user_id` and
+  `style_references`. Each reference is an image input (bytes, path, file-like
+  object, base64 string or URL — encoded like other image inputs), or a
+  mapping `{"image": ..., "strength": ...}`.
+- **`image.upscale(creativity=...)`** (0-0.02), which replaces Venice's removed
+  `enhance*` / `replication` fields.
+- **`image.background_remove`** now accepts `anon_user_id` and `**extra`.
+- Regenerated `_generated.py`: new request/response schemas, e.g. the
+  `bundledCredits` / `earnedCredits` balances, the `decision` model type, and
+  Topaz video constraints on `ModelResponse`.
+
+### Changed
+
+- **`video.queue(prompt=...)` is now optional**, for enhancement models that
+  take a `video_url` and no prompt.
+- **`model` is now optional** on `video.retrieve`, `retrieve_binary`,
+  `download`, `complete` and `wait_for_completion`; Venice resolves the job
+  from `queue_id`.
+
+### Deprecated (removed in 1.0)
+
+- **`billing.usage()` / `billing.iter_usage()`.** Venice sunset `/billing/usage`
+  on 2026-09-16 and it now answers 410. The methods keep their signatures, emit
+  a `DeprecationWarning` (and a type-checker warning via `@deprecated`), and
+  raise `VeniceGoneError` without making a network call. Use
+  `usage_history()` / `iter_usage_history()`.
+- **`video.transcribe()`.** Venice retired `/video/transcriptions` (410). It
+  now raises `VeniceGoneError` locally. For video analysis, use `chat.create`
+  with a `video_url` content part.
+- **`image.upscale(enhance=...)`.** It is still forwarded, but now emits a
+  `DeprecationWarning`; use `creativity=`.
+- `BillingUsageResponse` and `VideoTranscriptionResponse` stay importable from
+  `veniceresch.types` as hand-authored compatibility models.
+
 ## [0.6.2] — 2026-07-04
 
 ### Added
