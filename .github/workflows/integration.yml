@@ -31,6 +31,16 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Require the API key secret
+        # Without the key every test skips and the run reports green — which
+        # silently hid that this smoke never ran. Fail loudly instead.
+        env:
+          VENICE_API_KEY: ${{ secrets.VENICE_API_KEY }}
+        run: |
+          if [ -z "$VENICE_API_KEY" ]; then
+            echo "::error::VENICE_API_KEY secret is not set; the live smoke would skip every test. Add it with: gh secret set VENICE_API_KEY"
+            exit 1
+          fi
       - name: Install
         run: pip install -e ".[dev]"
       - name: Run integration smoke
