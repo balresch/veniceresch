@@ -168,7 +168,9 @@ class VenicePermissionError(VeniceAPIError):
 
     Most commonly an API key restricted by ``ipAllowlist`` used from a source
     IP outside that list (Venice now lists this 403 on every authenticated
-    route), or an inference-scope key calling an admin-only endpoint.
+    route). Note that an inference-scope key calling an admin-only endpoint
+    (e.g. ``/billing/*``) gets **401** "Admin API key required" instead, which
+    maps to :class:`VeniceAuthError`.
     """
 
 

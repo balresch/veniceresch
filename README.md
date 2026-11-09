@@ -485,7 +485,7 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 | `VeniceX402PaymentRequiredError` | 402 from an x402 endpoint — body is an x402 discovery payload (`x402_version`, `accepts`), not an error |
 | `VeniceValidationError` | 400 / 422 — bad request shape |
 | `VeniceProviderContentPolicyError` | 422 — upstream provider rejected on content policy (`recommended_model`, `credits_refunded`); detected by body shape |
-| `VenicePermissionError` | 403 — authenticated but not allowed (e.g. key's `ip_allowlist` excludes the source IP) |
+| `VenicePermissionError` | 403 — authenticated but not allowed (e.g. key's `ip_allowlist` excludes the source IP; a wrong key *type* is 401 `VeniceAuthError`) |
 | `VeniceNotFoundError` | 404 |
 | `VeniceConflictError` | 409 — e.g. `video.complete` before the media is ready |
 | `VeniceGoneError` | 410 — endpoint retired (`sunset`, `deprecation`, `link` from headers) |
@@ -551,6 +551,7 @@ mypy src/veniceresch
 pytest                                    # unit tests (offline, respx-mocked)
 VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 VENICE_API_KEY=... VENICE_INTEGRATION_PAID=1 pytest tests/integration -m integration  # + billed jobs
+VENICE_ADMIN_API_KEY=... pytest tests/integration -m integration  # + admin-only (billing) checks
 ```
 
 ## Endpoint coverage

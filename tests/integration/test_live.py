@@ -11,6 +11,9 @@ Cost tiers:
   model calls, price quotes, the retired-endpoint 410 checks, and a
   single-question ``/decisions`` call of a few tokens (same order of cost as the
   minimal chat test).
+* **Admin-only** (opt-in with ``VENICE_ADMIN_API_KEY``): ``/billing/*``
+  rejects inference keys with 401, so those tests use a separate admin key and
+  skip without it — the routine key can stay a limited inference key.
 * **Paid** (opt-in with ``VENICE_INTEGRATION_PAID=1``): flows that are billed
   per job — e.g. the voice-changer round trip, which Venice charges by the
   minute (rounded up), plus the TTS call that produces its source clip. The
@@ -45,6 +48,20 @@ def api_key() -> str:
     key = os.environ.get("VENICE_API_KEY")
     if not key:
         pytest.skip("VENICE_API_KEY not set — integration tests disabled.")
+    return key
+
+
+@pytest.fixture(scope="module")
+def admin_key() -> str:
+    """Admin-scope key for /billing/* and other admin-only routes.
+
+    Kept separate from ``VENICE_API_KEY`` so the routine smoke can run on a
+    tightly limited *inference* key; Venice answers admin routes with
+    401 "Admin API key required" for inference keys.
+    """
+    key = os.environ.get("VENICE_ADMIN_API_KEY")
+    if not key:
+        pytest.skip("VENICE_ADMIN_API_KEY not set — admin-only (billing) tests disabled.")
     return key
 
 
@@ -86,8 +103,8 @@ async def test_models_list_video(api_key: str) -> None:
         assert isinstance(result, ModelList)
 
 
-async def test_billing_balance(api_key: str) -> None:
-    async with AsyncVeniceClient(api_key=api_key) as client:
+async def test_billing_balance(admin_key: str) -> None:
+    async with AsyncVeniceClient(api_key=admin_key) as client:
         result = await client.billing.balance()
         assert isinstance(result, BillingBalanceResponse)
 
@@ -116,8 +133,8 @@ async def test_image_styles(api_key: str) -> None:
 # ---- billing usage history (free) ------------------------------------------
 
 
-async def test_billing_usage_history_first_page(api_key: str) -> None:
-    async with AsyncVeniceClient(api_key=api_key) as client:
+async def test_billing_usage_history_first_page(admin_key: str) -> None:
+    async with AsyncVeniceClient(api_key=admin_key) as client:
         page = await client.billing.usage_history(page_size=10)
         assert isinstance(page, BillingUsageHistoryResponse)
         # Built via model_construct: assert the raw wire shape we depend on.
@@ -132,9 +149,9 @@ async def test_billing_usage_history_first_page(api_key: str) -> None:
             assert {"timestamp", "sku", "amount", "currency"} <= entry.keys()
 
 
-async def test_billing_usage_history_cursor_continuation(api_key: str) -> None:
+async def test_billing_usage_history_cursor_continuation(admin_key: str) -> None:
     """A continuation that sends *only* the cursor is accepted and pages forward."""
-    async with AsyncVeniceClient(api_key=api_key) as client:
+    async with AsyncVeniceClient(api_key=admin_key) as client:
         first = await client.billing.usage_history(page_size=10)
         cursor = getattr(first, "nextCursor", None)
         if not cursor:
@@ -146,8 +163,8 @@ async def test_billing_usage_history_cursor_continuation(api_key: str) -> None:
             assert first.data[-1]["timestamp"] <= second.data[0]["timestamp"]
 
 
-async def test_billing_iter_usage_history_walks_two_pages(api_key: str) -> None:
-    async with AsyncVeniceClient(api_key=api_key) as client:
+async def test_billing_iter_usage_history_walks_two_pages(admin_key: str) -> None:
+    async with AsyncVeniceClient(api_key=admin_key) as client:
         pages = []
         async for page in client.billing.iter_usage_history(page_size=10).iter_pages():
             pages.append(page)
@@ -156,8 +173,8 @@ async def test_billing_iter_usage_history_walks_two_pages(api_key: str) -> None:
         assert pages and all(isinstance(p.data, list) for p in pages)
 
 
-async def test_billing_usage_history_csv(api_key: str) -> None:
-    async with AsyncVeniceClient(api_key=api_key) as client:
+async def test_billing_usage_history_csv(admin_key: str) -> None:
+    async with AsyncVeniceClient(api_key=admin_key) as client:
         page = await client.billing.usage_history_csv(page_size=10)
         assert isinstance(page, BillingUsageHistoryCsvPage)
         assert isinstance(page.content, bytes) and page.content
