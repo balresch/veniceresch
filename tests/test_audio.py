@@ -8,7 +8,7 @@ import json
 import httpx
 import pytest
 
-from veniceresch import VeniceAudioFailedError, VeniceAudioTimeoutError
+from veniceresch import VeniceAudioFailedError, VeniceAudioTimeoutError, VeniceServerError
 
 
 async def test_create_speech_returns_bytes(mock_api, async_client):
@@ -264,3 +264,153 @@ async def test_audio_complete(mock_api, async_client):
     await async_client.audio.complete(model="a", queue_id="q")
     body = json.loads(route.calls.last.request.content)
     assert body == {"model": "a", "queue_id": "q"}
+
+
+# ---- voice changer ----------------------------------------------------------
+
+
+async def test_voice_changer_queue_with_url_sends_json(mock_api, async_client):
+    route = mock_api.post("/audio/voice-changer/queue").respond(
+        200,
+        json={"model": "vc-1", "queue_id": "q1", "status": "QUEUED", "duration_seconds": 61.2},
+    )
+    result = await async_client.audio.voice_changer.queue(
+        model="vc-1",
+        audio_url="https://example.com/in.mp3",
+        voice="aria",
+        remove_background_noise=True,
+        seed=7,
+    )
+    request = route.calls.last.request
+    assert request.headers["content-type"] == "application/json"
+    assert json.loads(request.content) == {
+        "model": "vc-1",
+        "audio_url": "https://example.com/in.mp3",
+        "voice": "aria",
+        "remove_background_noise": True,
+        "seed": 7,
+    }
+    assert result.queue_id == "q1"
+    assert result.duration_seconds == 61.2
+
+
+async def test_voice_changer_queue_with_file_sends_multipart(mock_api, async_client):
+    route = mock_api.post("/audio/voice-changer/queue").respond(
+        200, json={"model": "vc-1", "queue_id": "q2", "status": "QUEUED", "duration_seconds": 3}
+    )
+    await async_client.audio.voice_changer.queue(
+        model="vc-1", file=b"MP3DATA", remove_background_noise=False
+    )
+    request = route.calls.last.request
+    assert request.headers["content-type"].startswith("multipart/form-data")
+    content = request.content
+    assert b'name="file"' in content and b"MP3DATA" in content
+    assert b'name="model"' in content and b"vc-1" in content
+    # Booleans go on the wire JSON-style, not as Python's "False".
+    assert b'name="remove_background_noise"\r\n\r\nfalse' in content
+    assert b"audio_url" not in content
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"file": b"x", "audio_url": "https://e/x.mp3"}])
+def test_voice_changer_queue_requires_exactly_one_source(mock_api, sync_client, kwargs):
+    route = mock_api.post("/audio/voice-changer/queue")
+    with pytest.raises(ValueError, match="exactly one"):
+        sync_client.audio.voice_changer.queue(model="vc-1", **kwargs)
+    assert not route.called
+
+
+def test_voice_changer_quote(mock_api, sync_client):
+    route = mock_api.post("/audio/voice-changer/quote").respond(
+        200, json={"quote": 0.12, "duration_seconds": 90}
+    )
+    result = sync_client.audio.voice_changer.quote(model="vc-1", duration_seconds=90)
+    assert json.loads(route.calls.last.request.content) == {
+        "model": "vc-1",
+        "duration_seconds": 90,
+    }
+    assert result.quote == 0.12
+
+
+async def test_voice_changer_retrieve_processing_json(mock_api, async_client):
+    route = mock_api.post("/audio/voice-changer/retrieve").respond(
+        200,
+        json={"status": "PROCESSING", "average_execution_time": 9000, "execution_duration": 1200},
+    )
+    result = await async_client.audio.voice_changer.retrieve(model="vc-1", queue_id="q1")
+    assert route.calls.last.request.headers["accept"] == "audio/mpeg, application/json"
+    assert result.status == "PROCESSING"
+    assert result.audio is None
+    assert result.average_execution_time == 9000
+
+
+def test_voice_changer_retrieve_completed_bytes(mock_api, sync_client):
+    route = mock_api.post("/audio/voice-changer/retrieve").respond(
+        200,
+        content=b"ID3-converted",
+        headers={
+            "Content-Type": "audio/mpeg",
+            "x-venice-audio-format": "mp3",
+            "x-venice-audio-duration": "61.5",
+            "x-venice-inference-time": "8123",
+            "x-venice-model-id": "vc-1",
+            "x-venice-model-name": "Voice Changer",
+        },
+    )
+    result = sync_client.audio.voice_changer.retrieve(
+        model="vc-1", queue_id="q1", delete_media_on_completion=True
+    )
+    assert json.loads(route.calls.last.request.content) == {
+        "model": "vc-1",
+        "queue_id": "q1",
+        "delete_media_on_completion": True,
+    }
+    assert result.status == "COMPLETED"
+    assert result.audio == b"ID3-converted"
+    assert result.audio_format == "mp3"
+    assert result.audio_duration == 61.5
+    assert result.inference_time == 8123.0
+    assert result.model_id == "vc-1"
+    assert result.model_name == "Voice Changer"
+
+
+async def test_voice_changer_wait_for_completion(mock_api, async_client):
+    route = mock_api.post("/audio/voice-changer/retrieve").mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json={"status": "PROCESSING", "average_execution_time": 1, "execution_duration": 1},
+            ),
+            httpx.Response(200, content=b"AUDIO", headers={"Content-Type": "audio/mpeg"}),
+        ]
+    )
+    result = await async_client.audio.voice_changer.wait_for_completion(
+        model="vc-1", queue_id="q1", poll_interval_s=0
+    )
+    assert route.call_count == 2
+    assert result.audio == b"AUDIO"
+
+
+def test_voice_changer_wait_times_out(mock_api, sync_client):
+    mock_api.post("/audio/voice-changer/retrieve").respond(
+        200, json={"status": "PROCESSING", "average_execution_time": 1, "execution_duration": 1}
+    )
+    with pytest.raises(VeniceAudioTimeoutError):
+        sync_client.audio.voice_changer.wait_for_completion(
+            model="vc-1", queue_id="q1", timeout_s=0, poll_interval_s=0
+        )
+
+
+def test_voice_changer_failure_raises_with_refund_info(mock_api, sync_client):
+    mock_api.post("/audio/voice-changer/retrieve").respond(
+        504, json={"error": "Media could not be found.", "credits_refunded": True}
+    )
+    with pytest.raises(VeniceServerError) as info:
+        sync_client.audio.voice_changer.retrieve(model="vc-1", queue_id="q1")
+    assert info.value.error_body["credits_refunded"] is True
+
+
+async def test_voice_changer_complete(mock_api, async_client):
+    route = mock_api.post("/audio/voice-changer/complete").respond(200, json={"success": True})
+    result = await async_client.audio.voice_changer.complete(model="vc-1", queue_id="q1")
+    assert json.loads(route.calls.last.request.content) == {"model": "vc-1", "queue_id": "q1"}
+    assert result.success is True

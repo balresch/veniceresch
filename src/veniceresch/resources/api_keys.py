@@ -9,11 +9,25 @@ stripped.
 Request-body and query-parameter keys are camelCase in Venice's swagger;
 the Python API accepts snake_case and translates (``api_key_type →
 apiKeyType``, ``consumption_limit → consumptionLimit``, ``expires_at →
-expiresAt``) — same convention as ``model_id → modelId`` elsewhere.
+expiresAt``, ``limit_period → limitPeriod``, ``model_privacy →
+modelPrivacy``, ``ip_allowlist → ipAllowlist``) — same convention as
+``model_id → modelId`` elsewhere.
+
+Access controls on create / update / web3 create:
+
+- ``limit_period`` — reset window for ``consumption_limit``: ``"EPOCH"``
+  (every UTC day, the legacy default), ``"MONTH"`` or ``"LIFETIME"``.
+- ``model_privacy`` — which models the key may call by privacy tier:
+  ``"ALL"``, ``"PRIVATE_TEXT"`` or ``"PRIVATE_ONLY"``.
+- ``ip_allowlist`` — IPv4/IPv6 addresses or CIDR subnets allowed to use the
+  key. On ``update``, pass ``[]`` to clear it (allow any IP); omit / ``None``
+  to leave it unchanged. Requests from other IPs fail with
+  :class:`~veniceresch._errors.VenicePermissionError` (403).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from veniceresch.types import (
@@ -32,12 +46,32 @@ if TYPE_CHECKING:
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
+def _add_access_controls(
+    body: dict[str, Any],
+    *,
+    limit_period: str | None,
+    model_privacy: str | None,
+    ip_allowlist: Sequence[str] | None,
+) -> None:
+    if limit_period is not None:
+        body["limitPeriod"] = limit_period
+    if model_privacy is not None:
+        body["modelPrivacy"] = model_privacy
+    # An explicit empty list is meaningful (it clears the allowlist, allowing
+    # any IP), so only ``None`` is dropped.
+    if ip_allowlist is not None:
+        body["ipAllowlist"] = list(ip_allowlist)
+
+
 def _create_body(
     *,
     api_key_type: str,
     description: str,
     consumption_limit: dict[str, Any] | None,
     expires_at: str | None,
+    limit_period: str | None,
+    model_privacy: str | None,
+    ip_allowlist: Sequence[str] | None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "apiKeyType": api_key_type,
@@ -47,6 +81,12 @@ def _create_body(
         body["consumptionLimit"] = consumption_limit
     if expires_at is not None:
         body["expiresAt"] = expires_at
+    _add_access_controls(
+        body,
+        limit_period=limit_period,
+        model_privacy=model_privacy,
+        ip_allowlist=ip_allowlist,
+    )
     return body
 
 
@@ -56,6 +96,9 @@ def _update_body(
     description: str | None,
     consumption_limit: dict[str, Any] | None,
     expires_at: str | None,
+    limit_period: str | None,
+    model_privacy: str | None,
+    ip_allowlist: Sequence[str] | None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {"id": id}
     if description is not None:
@@ -64,6 +107,12 @@ def _update_body(
         body["consumptionLimit"] = consumption_limit
     if expires_at is not None:
         body["expiresAt"] = expires_at
+    _add_access_controls(
+        body,
+        limit_period=limit_period,
+        model_privacy=model_privacy,
+        ip_allowlist=ip_allowlist,
+    )
     return body
 
 
@@ -76,6 +125,9 @@ def _web3_create_body(
     description: str | None,
     consumption_limit: dict[str, Any] | None,
     expires_at: str | None,
+    limit_period: str | None,
+    model_privacy: str | None,
+    ip_allowlist: Sequence[str] | None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "apiKeyType": api_key_type,
@@ -89,6 +141,12 @@ def _web3_create_body(
         body["consumptionLimit"] = consumption_limit
     if expires_at is not None:
         body["expiresAt"] = expires_at
+    _add_access_controls(
+        body,
+        limit_period=limit_period,
+        model_privacy=model_privacy,
+        ip_allowlist=ip_allowlist,
+    )
     return body
 
 
@@ -113,12 +171,18 @@ class AsyncApiKeysResource:
         description: str,
         consumption_limit: dict[str, Any] | None = None,
         expires_at: str | None = None,
+        limit_period: str | None = None,
+        model_privacy: str | None = None,
+        ip_allowlist: Sequence[str] | None = None,
     ) -> ApiKeyCreateResponse:
         body = _create_body(
             api_key_type=api_key_type,
             description=description,
             consumption_limit=consumption_limit,
             expires_at=expires_at,
+            limit_period=limit_period,
+            model_privacy=model_privacy,
+            ip_allowlist=ip_allowlist,
         )
         raw = await self._client._request_json("POST", "/api_keys", json_body=body)
         return ApiKeyCreateResponse.model_validate(raw)
@@ -130,12 +194,18 @@ class AsyncApiKeysResource:
         description: str | None = None,
         consumption_limit: dict[str, Any] | None = None,
         expires_at: str | None = None,
+        limit_period: str | None = None,
+        model_privacy: str | None = None,
+        ip_allowlist: Sequence[str] | None = None,
     ) -> ApiKeyUpdateResponse:
         body = _update_body(
             id=id,
             description=description,
             consumption_limit=consumption_limit,
             expires_at=expires_at,
+            limit_period=limit_period,
+            model_privacy=model_privacy,
+            ip_allowlist=ip_allowlist,
         )
         raw = await self._client._request_json("PATCH", "/api_keys", json_body=body)
         return ApiKeyUpdateResponse.model_validate(raw)
@@ -171,6 +241,9 @@ class AsyncApiKeysResource:
         description: str | None = None,
         consumption_limit: dict[str, Any] | None = None,
         expires_at: str | None = None,
+        limit_period: str | None = None,
+        model_privacy: str | None = None,
+        ip_allowlist: Sequence[str] | None = None,
     ) -> Web3KeyCreateResponse:
         """Mint an API key from a signed SIWE challenge.
 
@@ -186,6 +259,9 @@ class AsyncApiKeysResource:
             description=description,
             consumption_limit=consumption_limit,
             expires_at=expires_at,
+            limit_period=limit_period,
+            model_privacy=model_privacy,
+            ip_allowlist=ip_allowlist,
         )
         raw = await self._client._request_json(
             "POST",
@@ -217,12 +293,18 @@ class ApiKeysResource:
         description: str,
         consumption_limit: dict[str, Any] | None = None,
         expires_at: str | None = None,
+        limit_period: str | None = None,
+        model_privacy: str | None = None,
+        ip_allowlist: Sequence[str] | None = None,
     ) -> ApiKeyCreateResponse:
         body = _create_body(
             api_key_type=api_key_type,
             description=description,
             consumption_limit=consumption_limit,
             expires_at=expires_at,
+            limit_period=limit_period,
+            model_privacy=model_privacy,
+            ip_allowlist=ip_allowlist,
         )
         raw = self._client._request_json("POST", "/api_keys", json_body=body)
         return ApiKeyCreateResponse.model_validate(raw)
@@ -234,12 +316,18 @@ class ApiKeysResource:
         description: str | None = None,
         consumption_limit: dict[str, Any] | None = None,
         expires_at: str | None = None,
+        limit_period: str | None = None,
+        model_privacy: str | None = None,
+        ip_allowlist: Sequence[str] | None = None,
     ) -> ApiKeyUpdateResponse:
         body = _update_body(
             id=id,
             description=description,
             consumption_limit=consumption_limit,
             expires_at=expires_at,
+            limit_period=limit_period,
+            model_privacy=model_privacy,
+            ip_allowlist=ip_allowlist,
         )
         raw = self._client._request_json("PATCH", "/api_keys", json_body=body)
         return ApiKeyUpdateResponse.model_validate(raw)
@@ -274,6 +362,9 @@ class ApiKeysResource:
         description: str | None = None,
         consumption_limit: dict[str, Any] | None = None,
         expires_at: str | None = None,
+        limit_period: str | None = None,
+        model_privacy: str | None = None,
+        ip_allowlist: Sequence[str] | None = None,
     ) -> Web3KeyCreateResponse:
         body = _web3_create_body(
             api_key_type=api_key_type,
@@ -283,6 +374,9 @@ class ApiKeysResource:
             description=description,
             consumption_limit=consumption_limit,
             expires_at=expires_at,
+            limit_period=limit_period,
+            model_privacy=model_privacy,
+            ip_allowlist=ip_allowlist,
         )
         raw = self._client._request_json(
             "POST",

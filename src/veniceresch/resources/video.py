@@ -6,6 +6,12 @@ Venice's video API is queue-based:
 2. Poll ``/video/retrieve`` with that ``queue_id`` until ``status == "COMPLETED"``.
 3. Fetch the MP4 bytes with :meth:`download`.
 
+``model`` is optional on the follow-up calls (``retrieve`` / ``complete`` /
+``download`` / ``wait_for_completion``): Venice resolves the job from
+``queue_id`` alone. ``prompt`` is optional on ``queue`` because enhancement /
+upscale models (e.g. the Topaz family, driven by ``video_url`` plus
+``enhancement_model`` / ``target_fps`` / ``slowdown_factor`` / …) take none.
+
 The two model families return the media differently: direct-bytes models hand
 back MP4 bytes from ``/video/retrieve`` (what :meth:`retrieve_binary` reads),
 while VPS-backed models (the ``-private`` grok models) ignore ``Accept:
@@ -26,9 +32,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
-from veniceresch._errors import VeniceAPIError, VeniceUnexpectedContentTypeError
+from typing_extensions import deprecated
+
+from veniceresch._errors import VeniceAPIError, VeniceGoneError, VeniceUnexpectedContentTypeError
 from veniceresch.resources._polling import (
     VeniceJobFailedError,
     is_failure_status,
@@ -39,7 +47,6 @@ from veniceresch.types import (
     VideoQueueResponse,
     VideoQuoteResponse,
     VideoRetrieveResponse,
-    VideoTranscriptionResponse,
 )
 
 if TYPE_CHECKING:
@@ -48,6 +55,25 @@ if TYPE_CHECKING:
 
 _DEFAULT_TIMEOUT_S = 600.0
 _DEFAULT_POLL_S = 2.0
+_TRANSCRIBE_DEPRECATION = (
+    "video.transcribe() is gone (Venice retired /video/transcriptions); "
+    "use chat.create with a video_url content part"
+)
+_TRANSCRIBE_GONE_MESSAGE = (
+    "POST /video/transcriptions was retired by Venice and no longer serves data. "
+    "For video analysis, use chat.create(...) with the video URL passed as a "
+    "video_url content part, on a model whose "
+    "model_spec.capabilities.supportsVideoInput is true (see models.list())."
+)
+
+
+def _transcribe_gone() -> NoReturn:
+    raise VeniceGoneError(
+        _TRANSCRIBE_GONE_MESSAGE,
+        status_code=410,
+        error_body={"error": _TRANSCRIBE_GONE_MESSAGE},
+        link="/chat/completions",
+    )
 
 
 class VeniceVideoTimeoutError(VeniceAPIError):
@@ -99,7 +125,7 @@ class AsyncVideoResource:
         self,
         *,
         model: str,
-        prompt: str,
+        prompt: str | None = None,
         duration: str | None = None,
         **extra: Any,
     ) -> VideoQueueResponse:
@@ -110,7 +136,7 @@ class AsyncVideoResource:
     async def retrieve(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         delete_media_on_completion: bool | None = None,
     ) -> VideoRetrieveResponse:
@@ -128,7 +154,7 @@ class AsyncVideoResource:
     async def retrieve_binary(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         delete_media_on_completion: bool | None = None,
     ) -> bytes:
@@ -158,7 +184,7 @@ class AsyncVideoResource:
     async def download(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         download_url: str | None = None,
     ) -> bytes:
@@ -208,31 +234,34 @@ class AsyncVideoResource:
     async def complete(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
     ) -> VideoCompleteResponse:
-        body = {"model": model, "queue_id": queue_id}
+        body = _drop_none({"model": model, "queue_id": queue_id})
         raw = await self._client._request_json("POST", "/video/complete", json_body=body)
         return VideoCompleteResponse.model_validate(raw)
 
+    @deprecated(_TRANSCRIBE_DEPRECATION)
     async def transcribe(
         self,
         *,
         url: str,
         response_format: str | None = None,
-    ) -> VideoTranscriptionResponse:
-        body = _drop_none({"url": url, "response_format": response_format})
-        raw = await self._client._request_json(
-            "POST",
-            "/video/transcriptions",
-            json_body=body,
-        )
-        return VideoTranscriptionResponse.model_validate(raw)
+    ) -> NoReturn:
+        """Deprecated: Venice retired ``/video/transcriptions`` (HTTP 410).
+
+        Always raises :class:`~veniceresch._errors.VeniceGoneError` (no
+        network call). For video analysis, summaries or questions about a
+        video, call ``chat.create`` with the video URL as a ``video_url``
+        content part on a model whose
+        ``model_spec.capabilities.supportsVideoInput`` is true. Removed in 1.0.
+        """
+        _transcribe_gone()
 
     async def wait_for_completion(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,
@@ -274,7 +303,7 @@ class VideoResource:
         self,
         *,
         model: str,
-        prompt: str,
+        prompt: str | None = None,
         duration: str | None = None,
         **extra: Any,
     ) -> VideoQueueResponse:
@@ -285,7 +314,7 @@ class VideoResource:
     def retrieve(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         delete_media_on_completion: bool | None = None,
     ) -> VideoRetrieveResponse:
@@ -302,7 +331,7 @@ class VideoResource:
     def retrieve_binary(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         delete_media_on_completion: bool | None = None,
     ) -> bytes:
@@ -329,7 +358,7 @@ class VideoResource:
     def download(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         download_url: str | None = None,
     ) -> bytes:
@@ -362,22 +391,20 @@ class VideoResource:
         raw = self._client._request_json("POST", "/video/quote", json_body=body)
         return VideoQuoteResponse.model_validate(raw)
 
-    def complete(self, *, model: str, queue_id: str) -> VideoCompleteResponse:
-        body = {"model": model, "queue_id": queue_id}
+    def complete(self, *, model: str | None = None, queue_id: str) -> VideoCompleteResponse:
+        body = _drop_none({"model": model, "queue_id": queue_id})
         raw = self._client._request_json("POST", "/video/complete", json_body=body)
         return VideoCompleteResponse.model_validate(raw)
 
-    def transcribe(
-        self, *, url: str, response_format: str | None = None
-    ) -> VideoTranscriptionResponse:
-        body = _drop_none({"url": url, "response_format": response_format})
-        raw = self._client._request_json("POST", "/video/transcriptions", json_body=body)
-        return VideoTranscriptionResponse.model_validate(raw)
+    @deprecated(_TRANSCRIBE_DEPRECATION)
+    def transcribe(self, *, url: str, response_format: str | None = None) -> NoReturn:
+        """Sync mirror of :meth:`AsyncVideoResource.transcribe` (deprecated)."""
+        _transcribe_gone()
 
     def wait_for_completion(
         self,
         *,
-        model: str,
+        model: str | None = None,
         queue_id: str,
         timeout_s: float = _DEFAULT_TIMEOUT_S,
         poll_interval_s: float = _DEFAULT_POLL_S,

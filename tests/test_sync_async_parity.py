@@ -275,3 +275,64 @@ async def test_generate_web3_key_no_auth_parity(mock_api, async_client, sync_cli
     fp = _assert_parity(route)
     assert "authorization" not in fp["headers"]
     assert b"apiKeyType" in fp["content"]
+
+
+# ---- 0.7.0 surfaces -----------------------------------------------------------
+
+
+async def test_voice_changer_multipart_queue_parity(mock_api, async_client, sync_client):
+    route = mock_api.post("/audio/voice-changer/queue").respond(
+        200, json={"model": "vc", "queue_id": "q", "status": "QUEUED", "duration_seconds": 1}
+    )
+    kwargs = dict(model="vc", file=b"MP3", voice="aria", remove_background_noise=True, seed=3)
+    await async_client.audio.voice_changer.queue(**kwargs)
+    sync_client.audio.voice_changer.queue(**kwargs)
+    fp = _assert_parity(route)
+    assert b"true" in fp["content"]
+
+
+async def test_voice_changer_retrieve_parity(mock_api, async_client, sync_client):
+    route = mock_api.post("/audio/voice-changer/retrieve").respond(
+        200, content=b"A", headers={"Content-Type": "audio/mpeg"}
+    )
+    kwargs = dict(model="vc", queue_id="q", delete_media_on_completion=True)
+    await async_client.audio.voice_changer.retrieve(**kwargs)
+    sync_client.audio.voice_changer.retrieve(**kwargs)
+    _assert_parity(route)
+
+
+async def test_usage_history_parity(mock_api, async_client, sync_client):
+    route = mock_api.get("/billing/usage-history").respond(
+        200, json={"data": [], "nextCursor": None}
+    )
+    kwargs = dict(currency="USD", start_timestamp="2026-10-01T00:00:00Z", page_size=100)
+    await async_client.billing.usage_history(**kwargs)
+    sync_client.billing.usage_history(**kwargs)
+    _assert_parity(route)
+
+
+async def test_style_references_parity(mock_api, async_client, sync_client):
+    route = mock_api.post("/image/generate").respond(200, json={"images": []})
+    kwargs = dict(
+        model="m",
+        prompt="p",
+        style_references=[b"\x89PNG-ref", {"image": b"\x89PNG-two", "strength": 0.3}],
+    )
+    await async_client.image.generate(**kwargs)
+    sync_client.image.generate(**kwargs)
+    _assert_parity(route)
+
+
+async def test_api_keys_access_controls_parity(mock_api, async_client, sync_client):
+    route = mock_api.post("/api_keys").respond(200, json={"success": True, "data": {}})
+    kwargs = dict(
+        api_key_type="INFERENCE",
+        description="d",
+        limit_period="MONTH",
+        model_privacy="ALL",
+        ip_allowlist=["10.0.0.0/8"],
+    )
+    await async_client.api_keys.create(**kwargs)
+    sync_client.api_keys.create(**kwargs)
+    fp = _assert_parity(route)
+    assert b'"ipAllowlist"' in fp["content"]

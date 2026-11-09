@@ -163,8 +163,68 @@ class VeniceProviderContentPolicyError(VeniceAPIError):
         self.credits_refunded = credits_refunded
 
 
+class VenicePermissionError(VeniceAPIError):
+    """403 — the request was authenticated but is not allowed.
+
+    Most commonly an API key restricted by ``ipAllowlist`` used from a source
+    IP outside that list (Venice now lists this 403 on every authenticated
+    route). Note that an inference-scope key calling an admin-only endpoint
+    (e.g. ``/billing/*``) gets **401** "Admin API key required" instead, which
+    maps to :class:`VeniceAuthError`.
+    """
+
+
 class VeniceNotFoundError(VeniceAPIError):
     """404 — the resource does not exist (e.g., unknown model or queue id)."""
+
+
+class VeniceConflictError(VeniceAPIError):
+    """409 — the request conflicts with the resource's current state.
+
+    e.g. ``/video/complete`` called before the media has finished: keep
+    polling ``retrieve`` until it completes, then call ``complete``.
+    """
+
+
+class VeniceGoneError(VeniceAPIError):
+    """410 — the endpoint has been retired and no longer serves data.
+
+    Venice answers sunset endpoints (``/billing/usage``,
+    ``/video/transcriptions``) with 410 and names the replacement in the
+    message. The RFC 8594 / RFC 9745 headers are surfaced when present:
+    :attr:`sunset` (``Sunset``), :attr:`deprecation` (``Deprecation``) and
+    :attr:`link` (``Link`` — points at the replacement).
+
+    The SDK's deprecated wrappers for those endpoints raise this locally,
+    without a network round-trip, with ``status_code=410``.
+    """
+
+    sunset: str | None
+    deprecation: str | None
+    link: str | None
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        error_body: dict[str, Any] | str,
+        sunset: str | None = None,
+        deprecation: str | None = None,
+        link: str | None = None,
+        request: httpx.Request | None = None,
+        response: httpx.Response | None = None,
+    ) -> None:
+        super().__init__(
+            message,
+            status_code=status_code,
+            error_body=error_body,
+            request=request,
+            response=response,
+        )
+        self.sunset = sunset
+        self.deprecation = deprecation
+        self.link = link
 
 
 class VeniceRateLimitError(VeniceAPIError):
@@ -223,9 +283,17 @@ class VeniceContentViolationError(VeniceAPIError):
     body usually includes a ``suggested_prompt`` that nudges the request back
     into policy. We detect by body shape (presence of ``suggested_prompt``)
     rather than status code, since Venice has used both 400 and 422 for this.
+
+    Image endpoints return the richer ``ImageContentViolationError`` body
+    (422), which may also carry :attr:`recommended_model` (an alternative model
+    ID) and :attr:`retryable` (``True`` when the provider's moderation is
+    nondeterministic, so retrying the same request may succeed; ``False`` when
+    it would be rejected again). Both are ``None`` when absent.
     """
 
     suggested_prompt: str | None
+    recommended_model: str | None
+    retryable: bool | None
 
     def __init__(
         self,
@@ -234,6 +302,8 @@ class VeniceContentViolationError(VeniceAPIError):
         status_code: int,
         error_body: dict[str, Any] | str,
         suggested_prompt: str | None = None,
+        recommended_model: str | None = None,
+        retryable: bool | None = None,
         request: httpx.Request | None = None,
         response: httpx.Response | None = None,
     ) -> None:
@@ -245,6 +315,8 @@ class VeniceContentViolationError(VeniceAPIError):
             response=response,
         )
         self.suggested_prompt = suggested_prompt
+        self.recommended_model = recommended_model
+        self.retryable = retryable
 
 
 def _parse_body(response: httpx.Response) -> dict[str, Any] | str:
@@ -314,9 +386,23 @@ def raise_for_response(response: httpx.Response) -> None:
     # Content violations can come back as 400 or 422; detect by shape.
     if isinstance(body, dict) and "suggested_prompt" in body:
         suggested = body.get("suggested_prompt")
+        recommended = body.get("recommended_model")
+        retryable = body.get("retryable")
         raise VeniceContentViolationError(
             message,
             suggested_prompt=suggested if isinstance(suggested, str) else None,
+            recommended_model=recommended if isinstance(recommended, str) else None,
+            retryable=retryable if isinstance(retryable, bool) else None,
+            **kwargs,
+        )
+
+    if status == 410:
+        headers = response.headers
+        raise VeniceGoneError(
+            message,
+            sunset=headers.get("sunset"),
+            deprecation=headers.get("deprecation"),
+            link=headers.get("link"),
             **kwargs,
         )
 
@@ -345,8 +431,12 @@ def raise_for_response(response: httpx.Response) -> None:
         exc_cls = VeniceAuthError
     elif status == 402:
         exc_cls = VeniceInsufficientBalanceError
+    elif status == 403:
+        exc_cls = VenicePermissionError
     elif status == 404:
         exc_cls = VeniceNotFoundError
+    elif status == 409:
+        exc_cls = VeniceConflictError
     elif status in (400, 422):
         exc_cls = VeniceValidationError
     elif status == 413:
@@ -379,12 +469,15 @@ def translate_httpx_error(exc: httpx.HTTPError, context: str) -> VeniceError:
 __all__ = [
     "VeniceAPIError",
     "VeniceAuthError",
+    "VeniceConflictError",
     "VeniceConnectionError",
     "VeniceContentViolationError",
     "VeniceError",
+    "VeniceGoneError",
     "VeniceInsufficientBalanceError",
     "VeniceNotFoundError",
     "VenicePayloadTooLargeError",
+    "VenicePermissionError",
     "VeniceProviderContentPolicyError",
     "VeniceRateLimitError",
     "VeniceServerError",

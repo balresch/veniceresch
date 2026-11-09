@@ -27,7 +27,7 @@ from veniceresch._base_model import VeniceBaseModel
 from veniceresch._generated import (
     BillingBalanceResponse,
     BillingUsageAnalyticsResponse,
-    BillingUsageResponse,
+    BillingUsageHistoryResponse,
     ModelCompatibilitySchema,
     ModelResponse,
     ModelTraitSchema,
@@ -266,7 +266,13 @@ class VideoCompleteResponse(VeniceBaseModel):
 
 
 class VideoTranscriptionResponse(VeniceBaseModel):
-    """Response from ``POST /video/transcriptions`` (JSON form)."""
+    """Response from ``POST /video/transcriptions`` (JSON form).
+
+    .. deprecated:: 0.7.0
+        Venice retired ``/video/transcriptions`` (it now answers every request
+        with HTTP 410). Kept only so existing imports keep working; nothing in
+        the SDK returns it any more. Removed in 1.0.
+    """
 
     transcript: str | None = None
     lang: str | None = None
@@ -331,6 +337,105 @@ class ClonedVoiceResponse(VeniceBaseModel):
 
     id: str | None = None
     model: str | None = None
+
+
+class VoiceChangerQueueResponse(VeniceBaseModel):
+    """Response from ``POST /audio/voice-changer/queue``.
+
+    ``duration_seconds`` is the source length Venice measured server-side —
+    the exact quantity billed — so it can be reconciled against the estimate
+    from :meth:`~veniceresch.resources.audio.AsyncVoiceChangerResource.quote`.
+    """
+
+    model: str | None = None
+    queue_id: str | None = None
+    status: str | None = None
+    duration_seconds: float | None = None
+
+
+class VoiceChangerQuoteResponse(VeniceBaseModel):
+    """Response from ``POST /audio/voice-changer/quote`` — estimate in USD."""
+
+    quote: float | None = None
+    duration_seconds: float | None = None
+
+
+class VoiceChangerRetrieveResponse(AudioRetrieveResponse):
+    """Result of polling ``POST /audio/voice-changer/retrieve``.
+
+    That endpoint answers with a JSON ``{"status": "PROCESSING", ...}`` body
+    while the conversion runs and with the converted audio *bytes* once it is
+    done. The SDK folds both into this one model so a single call (and
+    :meth:`~veniceresch.resources.audio.AsyncVoiceChangerResource.wait_for_completion`)
+    covers the whole flow:
+
+    - still running: ``status`` is ``"PROCESSING"`` and ``audio`` is ``None``;
+    - finished: ``status`` is ``"COMPLETED"`` (synthesized by the SDK — Venice
+      sends no status with the bytes), ``audio`` holds the bytes, and the
+      ``x-venice-*`` response headers are surfaced as ``audio_format``,
+      ``audio_duration``, ``inference_time``, ``model_id`` and ``model_name``.
+    """
+
+    audio: bytes | None = None
+    content_type: str | None = None
+    audio_format: str | None = None
+    audio_duration: float | None = None
+    inference_time: float | None = None
+    model_id: str | None = None
+    model_name: str | None = None
+
+
+# ---- billing ------------------------------------------------------------
+
+
+class BillingUsageResponse(VeniceBaseModel):
+    """Response shape of the retired ``GET /billing/usage`` endpoint.
+
+    .. deprecated:: 0.7.0
+        Venice sunset ``/billing/usage`` on 2026-09-16 (it now answers every
+        request with HTTP 410). Use ``billing.usage_history()`` /
+        ``billing.iter_usage_history()``, which return
+        :class:`BillingUsageHistoryResponse`. Kept only so existing imports keep
+        working; removed in 1.0.
+    """
+
+    data: list[dict[str, Any]] = Field(default_factory=list)
+    pagination: dict[str, Any] | None = None
+
+
+class BillingUsageHistoryCsvPage(VeniceBaseModel):
+    """One CSV page from ``GET /billing/usage-history`` (``Accept: text/csv``).
+
+    ``content`` is the raw CSV export. ``next_cursor`` comes from the
+    ``x-next-cursor`` response header (CSV responses carry the continuation
+    token there rather than in a body field); ``None`` means this was the last
+    page. ``filename`` is parsed from ``Content-Disposition`` when present.
+    """
+
+    content: bytes
+    next_cursor: str | None = None
+    filename: str | None = None
+
+
+# ---- decisions ----------------------------------------------------------
+
+
+class DecisionResponse(VeniceBaseModel):
+    """Response from ``POST /decisions`` (beta).
+
+    ``answers`` maps each question key from the request to its typed answer:
+
+    - ``{"type": "noul", "noul": 0.93}`` — yes/no probability in ``[0, 1]``;
+    - ``{"type": "choice", "choice": "...", "probabilities": {...}, "confidence": ...}``;
+    - ``{"type": "score", "score": ..., ...}`` — position on the ordered rubric.
+
+    Answers are left as ``dict[str, Any]`` because the endpoint is in beta and
+    its shape may change. ``usage`` carries ``input_tokens`` / ``output_tokens``.
+    """
+
+    model: str | None = None
+    answers: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    usage: dict[str, Any] | None = None
 
 
 # ---- augment ------------------------------------------------------------
@@ -538,6 +643,8 @@ __all__ = [
     "AudioTranscriptionResponse",
     "BillingBalanceResponse",
     "BillingUsageAnalyticsResponse",
+    "BillingUsageHistoryCsvPage",
+    "BillingUsageHistoryResponse",
     "BillingUsageResponse",
     "CharacterDetailResponse",
     "CharacterListResponse",
@@ -546,6 +653,7 @@ __all__ = [
     "ChatCompletionResponse",
     "ClonedVoiceResponse",
     "CryptoRpcNetworksResponse",
+    "DecisionResponse",
     "EmbeddingsResponse",
     "GenerateImageResponse",
     "ImageStylesResponse",
@@ -566,6 +674,9 @@ __all__ = [
     "VideoQuoteResponse",
     "VideoRetrieveResponse",
     "VideoTranscriptionResponse",
+    "VoiceChangerQueueResponse",
+    "VoiceChangerQuoteResponse",
+    "VoiceChangerRetrieveResponse",
     "Web3KeyChallengeResponse",
     "Web3KeyCreateResponse",
     "WebScrapeRequest",

@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from veniceresch import (
     VeniceAPIError,
     VeniceAuthError,
+    VeniceConflictError,
     VeniceContentViolationError,
+    VeniceGoneError,
     VeniceInsufficientBalanceError,
     VeniceNotFoundError,
     VenicePayloadTooLargeError,
+    VenicePermissionError,
     VeniceProviderContentPolicyError,
     VeniceRateLimitError,
     VeniceServerError,
@@ -31,7 +35,10 @@ def test_2xx_response_is_noop(make_response):
         (400, VeniceValidationError),
         (401, VeniceAuthError),
         (402, VeniceInsufficientBalanceError),
+        (403, VenicePermissionError),
         (404, VeniceNotFoundError),
+        (409, VeniceConflictError),
+        (410, VeniceGoneError),
         (413, VenicePayloadTooLargeError),
         (422, VeniceValidationError),
         (429, VeniceRateLimitError),
@@ -161,5 +168,67 @@ def test_exception_hierarchy():
         VeniceInsufficientBalanceError,
         VeniceContentViolationError,
         VeniceX402PaymentRequiredError,
+        VenicePermissionError,
+        VeniceConflictError,
+        VeniceGoneError,
     ]:
         assert issubclass(exc_cls, VeniceAPIError)
+
+
+def test_ip_restricted_403_maps_to_permission_error(make_response):
+    msg = (
+        "This API key is restricted to configured IP addresses, and this "
+        "request's source IP is not allowed"
+    )
+    with pytest.raises(VenicePermissionError) as info:
+        raise_for_response(make_response.json(403, {"error": msg}))
+    assert str(info.value) == msg
+
+
+def test_gone_410_surfaces_sunset_headers():
+    request = httpx.Request("GET", "https://api.venice.ai/api/v1/billing/usage")
+    response = httpx.Response(
+        410,
+        json={"error": "Use GET /api/v1/billing/usage-history"},
+        headers={
+            "Sunset": "Wed, 16 Sep 2026 00:00:00 GMT",
+            "Deprecation": "@1780000000",
+            "Link": '</api/v1/billing/usage-history>; rel="successor-version"',
+        },
+        request=request,
+    )
+    with pytest.raises(VeniceGoneError) as info:
+        raise_for_response(response)
+    exc = info.value
+    assert exc.status_code == 410
+    assert exc.sunset == "Wed, 16 Sep 2026 00:00:00 GMT"
+    assert exc.deprecation == "@1780000000"
+    assert "usage-history" in (exc.link or "")
+
+
+def test_gone_410_without_headers_leaves_attrs_none(make_response):
+    with pytest.raises(VeniceGoneError) as info:
+        raise_for_response(make_response.json(410, {"error": "gone"}))
+    assert (info.value.sunset, info.value.deprecation, info.value.link) == (None, None, None)
+
+
+def test_image_content_violation_exposes_recommended_model_and_retryable(make_response):
+    body = {
+        "error": "Rejected by provider moderation",
+        "suggested_prompt": "a calmer scene",
+        "recommended_model": "flux-2-max",
+        "retryable": True,
+    }
+    with pytest.raises(VeniceContentViolationError) as info:
+        raise_for_response(make_response.json(422, body))
+    exc = info.value
+    assert exc.suggested_prompt == "a calmer scene"
+    assert exc.recommended_model == "flux-2-max"
+    assert exc.retryable is True
+
+
+def test_content_violation_new_fields_default_to_none(make_response):
+    with pytest.raises(VeniceContentViolationError) as info:
+        raise_for_response(make_response.json(400, {"error": "x", "suggested_prompt": "y"}))
+    assert info.value.recommended_model is None
+    assert info.value.retryable is None

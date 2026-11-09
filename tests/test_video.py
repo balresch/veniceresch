@@ -8,6 +8,8 @@ import httpx
 import pytest
 
 from veniceresch import (
+    VeniceConflictError,
+    VeniceGoneError,
     VeniceUnexpectedContentTypeError,
     VeniceVideoFailedError,
     VeniceVideoTimeoutError,
@@ -220,20 +222,51 @@ async def test_complete(mock_api, async_client):
     assert body == {"model": "v1", "queue_id": "q-123"}
 
 
-async def test_transcribe(mock_api, async_client):
-    route = mock_api.post("/video/transcriptions").respond(
-        200, json={"transcript": "hello", "lang": "en"}
-    )
-    result = await async_client.video.transcribe(
-        url="https://youtube.com/watch?v=x", response_format="json"
+async def test_transcribe_is_gone_without_network_call(mock_api, async_client):
+    route = mock_api.post("/video/transcriptions")
+    with (
+        pytest.warns(DeprecationWarning, match="video_url"),
+        pytest.raises(VeniceGoneError) as info,
+    ):
+        await async_client.video.transcribe(url="https://youtube.com/watch?v=x")
+    assert info.value.status_code == 410
+    assert "video_url" in str(info.value)
+    assert not route.called
+
+
+def test_transcribe_is_gone_sync(mock_api, sync_client):
+    with pytest.warns(DeprecationWarning), pytest.raises(VeniceGoneError):
+        sync_client.video.transcribe(url="https://example.com/v.mp4")
+
+
+async def test_queue_without_prompt_for_enhancement_models(mock_api, async_client):
+    route = mock_api.post("/video/queue").respond(200, json={"model": "topaz", "queue_id": "q1"})
+    await async_client.video.queue(
+        model="topaz-video-upscale",
+        duration="5s",
+        video_url="https://example.com/in.mp4",
+        enhancement_model="prob-4",
+        target_fps=60,
     )
     body = json.loads(route.calls.last.request.content)
-    assert body == {
-        "url": "https://youtube.com/watch?v=x",
-        "response_format": "json",
-    }
-    assert result.transcript == "hello"
-    assert result.lang == "en"
+    assert "prompt" not in body
+    assert body["video_url"] == "https://example.com/in.mp4"
+    assert body["target_fps"] == 60
+
+
+async def test_retrieve_and_complete_without_model(mock_api, async_client):
+    retrieve = mock_api.post("/video/retrieve").respond(200, json={"status": "COMPLETED"})
+    complete = mock_api.post("/video/complete").respond(200, json={"success": True})
+    await async_client.video.wait_for_completion(queue_id="q1")
+    await async_client.video.complete(queue_id="q1")
+    assert json.loads(retrieve.calls.last.request.content) == {"queue_id": "q1"}
+    assert json.loads(complete.calls.last.request.content) == {"queue_id": "q1"}
+
+
+def test_complete_before_ready_raises_conflict(mock_api, sync_client):
+    mock_api.post("/video/complete").respond(409, json={"error": "The media is not ready yet."})
+    with pytest.raises(VeniceConflictError):
+        sync_client.video.complete(queue_id="q1")
 
 
 # ---- wait_for_completion --------------------------------------------------

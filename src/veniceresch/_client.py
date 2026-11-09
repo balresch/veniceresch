@@ -33,6 +33,7 @@ from veniceresch.resources.billing import AsyncBillingResource, BillingResource
 from veniceresch.resources.characters import AsyncCharactersResource, CharactersResource
 from veniceresch.resources.chat import AsyncChatResource, ChatResource
 from veniceresch.resources.crypto import AsyncCryptoResource, CryptoResource
+from veniceresch.resources.decisions import AsyncDecisionsResource, DecisionsResource
 from veniceresch.resources.embeddings import AsyncEmbeddingsResource, EmbeddingsResource
 from veniceresch.resources.image import AsyncImageResource, ImageResource
 from veniceresch.resources.images import AsyncImagesResource, ImagesResource
@@ -228,6 +229,7 @@ class AsyncVeniceClient(_BaseClient):
         self.api_keys = AsyncApiKeysResource(self)
         self.x402 = AsyncX402Resource(self)
         self.crypto = AsyncCryptoResource(self)
+        self.decisions = AsyncDecisionsResource(self)
 
     async def __aenter__(self) -> Self:
         return self
@@ -441,6 +443,7 @@ class VeniceClient(_BaseClient):
         self.api_keys = ApiKeysResource(self)
         self.x402 = X402Resource(self)
         self.crypto = CryptoResource(self)
+        self.decisions = DecisionsResource(self)
 
     def __enter__(self) -> Self:
         return self
