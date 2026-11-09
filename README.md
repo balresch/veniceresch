@@ -40,14 +40,16 @@ pip install veniceresch
 import asyncio
 from veniceresch import AsyncVeniceClient
 
+
 async def main():
-    async with AsyncVeniceClient(api_key="...") as client:   # or set VENICE_API_KEY
+    async with AsyncVeniceClient(api_key="...") as client:  # or set VENICE_API_KEY
         response = await client.chat.create(
             model="llama-3.3-70b",
             messages=[{"role": "user", "content": "Hello!"}],
             venice_parameters={"include_venice_system_prompt": False},
         )
         print(response.choices[0]["message"]["content"])
+
 
 asyncio.run(main())
 ```
@@ -174,7 +176,10 @@ queued = await client.video.queue(model="video-v1", prompt="a cat", duration="5s
 
 # Poll until done (raises VeniceVideoTimeoutError at timeout):
 result = await client.video.wait_for_completion(
-    model="video-v1", queue_id=queued.queue_id, timeout_s=600, poll_interval_s=2.0,
+    model="video-v1",
+    queue_id=queued.queue_id,
+    timeout_s=600,
+    poll_interval_s=2.0,
 )
 print(result.status)  # "COMPLETED"
 
@@ -232,10 +237,13 @@ of `create_speech` with the same `model`. Handles expire after ~7 days.
 
 ```python
 voice = await client.audio.create_cloned_voice(
-    file=Path("sample.mp3"), model="tts-chatterbox-hd",
+    file=Path("sample.mp3"),
+    model="tts-chatterbox-hd",
 )
 mp3 = await client.audio.create_speech(
-    input="Now in the cloned voice.", voice=voice.id, model="tts-chatterbox-hd",
+    input="Now in the cloned voice.",
+    voice=voice.id,
+    model="tts-chatterbox-hd",
 )
 ```
 
@@ -248,10 +256,15 @@ JSON while running and the audio bytes when done; the SDK folds both into
 ```python
 quote = await client.audio.voice_changer.quote(model="vc-model", duration_seconds=90)
 job = await client.audio.voice_changer.queue(
-    model="vc-model", file=Path("take.wav"), voice="aria", remove_background_noise=True,
+    model="vc-model",
+    file=Path("take.wav"),
+    voice="aria",
+    remove_background_noise=True,
 )
 done = await client.audio.voice_changer.wait_for_completion(
-    model="vc-model", queue_id=job.queue_id, delete_media_on_completion=True,
+    model="vc-model",
+    queue_id=job.queue_id,
+    delete_media_on_completion=True,
 )
 Path("converted.mp3").write_bytes(done.audio)
 ```
@@ -268,7 +281,8 @@ balance = await client.billing.balance()
 
 # Usage ledger: cursor-paginated, ascending by timestamp.
 async for entry in client.billing.iter_usage_history(
-    currency="USD", start_timestamp=datetime(2026, 10, 1, tzinfo=timezone.utc),
+    currency="USD",
+    start_timestamp=datetime(2026, 10, 1, tzinfo=timezone.utc),
 ):
     print(entry["timestamp"], entry["sku"], entry["amount"])
 
@@ -315,8 +329,11 @@ result = await client.decisions.create(
     state=[{"role": "user", "content": "BUY NOW!!! limited offer"}],
     questions={
         "is_spam": {"type": "noul", "instructions": "Is this message spam?"},
-        "tone": {"type": "choice", "instructions": "Tone?",
-                 "criteria": {"angry": None, "calm": None, "excited": None}},
+        "tone": {
+            "type": "choice",
+            "instructions": "Tone?",
+            "criteria": {"angry": None, "calm": None, "excited": None},
+        },
     },
 )
 print(result.answers["is_spam"]["noul"], result.answers["tone"]["choice"])
@@ -365,8 +382,8 @@ await client.api_keys.create(
     api_key_type="INFERENCE",
     description="locked-down bot",
     consumption_limit={"usd": 20},
-    limit_period="MONTH",            # EPOCH (daily, default) | MONTH | LIFETIME
-    model_privacy="PRIVATE_ONLY",    # ALL | PRIVATE_TEXT | PRIVATE_ONLY
+    limit_period="MONTH",  # EPOCH (daily, default) | MONTH | LIFETIME
+    model_privacy="PRIVATE_ONLY",  # ALL | PRIVATE_TEXT | PRIVATE_ONLY
     ip_allowlist=["203.0.113.7", "10.0.0.0/8"],
 )
 await client.api_keys.update(id="k1", ip_allowlist=[])  # [] clears the allowlist
@@ -405,7 +422,9 @@ balance = await client.x402.balance("0xabc...", siwx_header=siwe_payload)
 print(balance.data["balanceUsd"], balance.data["canConsume"])
 
 history = await client.x402.transactions(
-    "0xabc...", siwx_header=siwe_payload, limit=25,
+    "0xabc...",
+    siwx_header=siwe_payload,
+    limit=25,
 )
 ```
 
@@ -460,9 +479,7 @@ async for tx in client.x402.iter_transactions("0xabc...", siwx_header=siwe_paylo
     print(tx["id"], tx["amount"])
 
 # Or page-by-page:
-async for page in client.x402.iter_transactions(
-    "0xabc...", siwx_header=siwe_payload
-).iter_pages():
+async for page in client.x402.iter_transactions("0xabc...", siwx_header=siwe_payload).iter_pages():
     print(f"{len(page.data['transactions'])} transactions on this page")
 ```
 
@@ -508,8 +525,7 @@ from veniceresch import (
 # Retriable failures — no httpx imports needed:
 try:
     await client.chat.create(model="m", messages=[...])
-except (VeniceRateLimitError, VeniceServerError,
-        VeniceConnectionError, VeniceTimeoutError):
+except (VeniceRateLimitError, VeniceServerError, VeniceConnectionError, VeniceTimeoutError):
     ...  # back off and retry
 
 try:
@@ -529,7 +545,9 @@ from veniceresch import VeniceClient
 
 with VeniceClient(api_key="...") as client:
     for event in client.chat.completions.create(
-        model="...", messages=[...], stream=True,
+        model="...",
+        messages=[...],
+        stream=True,
     ):
         ...
 ```

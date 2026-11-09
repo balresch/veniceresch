@@ -33,7 +33,7 @@ only rejects a 2xx body whose content-type is exactly `application/json`:
 ```python
 content_type = response.headers.get("content-type", "")
 if content_type.split(";", 1)[0].strip().lower() != "application/json":
-    return   # <-- everything non-JSON passes through as "media bytes"
+    return  # <-- everything non-JSON passes through as "media bytes"
 ```
 
 A 2xx `text/html` / `text/plain` / `application/xml` body (CDN error page,
@@ -91,10 +91,10 @@ for line in raw.splitlines():
     ...
     if not line.startswith("data:"):
         continue
-    payload = line[len("data:"):].strip()
+    payload = line[len("data:") :].strip()
     if payload == _DONE_SENTINEL:
         raise _StreamDone
-    return json.loads(payload)   # <-- only the first data: line in the event
+    return json.loads(payload)  # <-- only the first data: line in the event
 ```
 
 Per the SSE spec, one event may contain multiple `data:` lines that must be
@@ -548,9 +548,12 @@ casing assumptions:
 
 ```python
 # video.py:258 (async) / :390 (sync); audio.py:236 (async) / :376 (sync)
-if result.status != _STATUS_PROCESSING:          # exact-match "PROCESSING"
-    if (raise_on_failed and isinstance(result.status, str)
-            and result.status.upper() in _FAILURE_STATUSES):   # case-INsensitive
+if result.status != _STATUS_PROCESSING:  # exact-match "PROCESSING"
+    if (
+        raise_on_failed
+        and isinstance(result.status, str)
+        and result.status.upper() in _FAILURE_STATUSES
+    ):  # case-INsensitive
         raise VeniceVideoFailedError(...)
     return result
 ```
