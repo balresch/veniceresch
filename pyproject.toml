@@ -30,8 +30,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.6",
-    "mypy>=1.10",
+    # Pinned to a minor: new ruff/mypy minors change formatting or add errors on
+    # untouched code. Bump deliberately in its own PR (BACKLOG #14).
+    "ruff>=0.17.5,<0.18",
+    "mypy>=2.4,<2.5",
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",

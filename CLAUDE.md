@@ -66,7 +66,8 @@ Generated response types used directly by resources (`BillingBalanceResponse`, `
 - Unit tests (offline, respx-mocked): `.venv/bin/pytest` — integration tests are excluded by default via `addopts --ignore=tests/integration`. `tests/conftest.py` refuses to run when the system interpreter on this host is importing `veniceresch` from `src/` (that's the editable-system-install footgun above).
 - Integration smoke (hits real API): `VENICE_API_KEY=... .venv/bin/pytest tests/integration -m integration`. Free/token-cheap checks run by default; tests billed per job (voice-changer round trip, min. 1 minute; one image edit) also need `VENICE_INTEGRATION_PAID=1`; admin-only routes (`/billing/*` — inference keys get 401 "Admin API key required") use a separate optional `VENICE_ADMIN_API_KEY` and skip without it (the `paid` input on the manual `integration.yml` dispatch; the weekly schedule never sets it). New endpoints should get at least a free-tier live check here — the mocked suite can't catch wire drift.
 - Single test: `.venv/bin/pytest tests/test_chat.py::test_name`
-- Build dists locally: `.venv/bin/python -m build` → `.venv/bin/python -m twine check dist/*` (mirrors what CI does; `build`/`twine` aren't in the dev extras, so `.venv/bin/pip install build twine` once).
+- Build dists locally: `.venv/bin/python -m build` → `.venv/bin/python -m twine check dist/*` (mirrors what CI does; both are in the dev extras).
+- Tool versions: ruff and mypy are pinned to a minor in the `dev` extras (`ruff>=0.17.5,<0.18`, `mypy>=2.4,<2.5`) because new minors reformat or flag untouched code. Bump one deliberately in its own PR: raise the pin, `.venv/bin/pip install -e ".[dev]"`, run `ruff format .` / `ruff check .` / `mypy src/veniceresch`, and commit the resulting churn separately from feature work.
 
 ## Releasing
 

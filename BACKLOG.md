@@ -830,7 +830,9 @@ ordered-by-value convention as above. Develop in the project `.venv` (see
 
 ---
 
-## 14. Pin ruff to a minor version  — TODO
+## 14. Pin ruff to a minor version  — DONE
+
+**Done (2026-11-15).** Dev extras now pin `ruff>=0.17.5,<0.18` and `mypy>=2.4,<2.5` (both were the latest releases and what CI already resolved, so no churn). The bump procedure is in CLAUDE.md (Commands → Tool versions).
 
 **Priority: high, tiny.** Prevents surprise CI failures on untouched code.
 
