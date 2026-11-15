@@ -24,6 +24,8 @@ Cost tiers:
 from __future__ import annotations
 
 import os
+import struct
+import zlib
 from typing import Any
 
 import pytest
@@ -35,6 +37,7 @@ from veniceresch.types import (
     BillingUsageHistoryResponse,
     ChatCompletionResponse,
     DecisionResponse,
+    ImageBytes,
     ImageStylesResponse,
     ModelList,
     VoiceChangerQuoteResponse,
@@ -114,14 +117,24 @@ async def test_chat_completion_minimal(api_key: str) -> None:
         models = await client.models.list(type="text")
         if not models.data:
             pytest.skip("No text models available on this account.")
-        model_id = models.data[0]["id"]
+        # Prefer a non-reasoning model: a reasoning model can spend the whole
+        # tiny max_tokens budget on reasoning_content and return content=None.
+        plain = [
+            m
+            for m in models.data
+            if not (_spec(m).get("capabilities") or {}).get("supportsReasoning")
+        ]
+        model_id = (plain or models.data)[0]["id"]
         result = await client.chat.create(
             model=model_id,
             messages=[{"role": "user", "content": "Say 'pong' and nothing else."}],
             max_tokens=10,
         )
         assert isinstance(result, ChatCompletionResponse)
-        assert result.choices and result.choices[0]["message"]["content"]
+        assert result.choices
+        message = result.choices[0]["message"]
+        # Fallback model may be a reasoner: any generated text proves the round trip.
+        assert message.get("content") or message.get("reasoning_content"), message
 
 
 async def test_image_styles(api_key: str) -> None:
@@ -284,3 +297,42 @@ async def test_voice_changer_round_trip(paid: str) -> None:
             model=vc_model["id"], queue_id=job.queue_id
         )
         assert done.success in (True, False)  # idempotent cleanup; either is valid
+
+
+def _solid_png(size: int = 256, rgb: tuple[int, int, int] = (200, 40, 40)) -> bytes:
+    """A valid solid-colour PNG built with zlib only (no Pillow dependency)."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+
+    row = b"\x00" + bytes(rgb) * size
+    ihdr = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(row * size))
+        + chunk(b"IEND", b"")
+    )
+
+
+async def test_image_edit_header_metadata(paid: str) -> None:
+    """One /image/edit call with the default model: named fields reach the wire
+    and the x-venice-* headers land on ImageBytes.metadata (GH #12 / #13).
+
+    The swagger declares x-venice-is-blurred only on /image/generate; on edit it
+    appears only in the safe_mode description, so this checks Venice really
+    sends it. Billed: one image edit.
+    """
+    async with AsyncVeniceClient(api_key=paid) as client:
+        result = await client.image.edit(
+            image=_solid_png(),
+            prompt="Add a small yellow star in the centre.",
+            safe_mode=True,
+            enhance_prompt=True,
+            output_format="png",
+        )
+    assert isinstance(result, ImageBytes) and len(result) > 0
+    meta = result.metadata
+    print(f"edit metadata: {meta!r}")  # visible with -rA / on failure: records the live header set
+    assert meta.content_type and meta.content_type.startswith("image/")
+    assert meta.is_blurred is not None, f"no x-venice-is-blurred header; got {meta.headers}"

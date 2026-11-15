@@ -215,6 +215,38 @@ class AsyncVeniceClient(_BaseClient):
         no_auth: bool = False,
         guard_content_type: bool = True,
     ) -> bytes:
+        response = await self._request_bytes_response(
+            method,
+            path,
+            json_body=json_body,
+            params=params,
+            headers=headers,
+            files=files,
+            data=data,
+            no_auth=no_auth,
+            guard_content_type=guard_content_type,
+        )
+        return response.content
+
+    async def _request_bytes_response(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: Any = None,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        files: Mapping[str, Any] | None = None,
+        data: Mapping[str, Any] | None = None,
+        no_auth: bool = False,
+        guard_content_type: bool = True,
+    ) -> httpx.Response:
+        """Like :meth:`_request_bytes` but returns the whole response.
+
+        For binary endpoints whose response *headers* matter too (the
+        ``/image/*`` methods read ``x-venice-*`` into ``ImageBytes.metadata``).
+        Same Accept default and content-type guard as ``_request_bytes``.
+        """
         response = await self._send(
             method,
             path,
@@ -228,7 +260,7 @@ class AsyncVeniceClient(_BaseClient):
         )
         if guard_content_type:
             _guard_binary_content_type(response)
-        return response.content
+        return response
 
     @asynccontextmanager
     async def _request_stream(
@@ -429,6 +461,38 @@ class VeniceClient(_BaseClient):
         no_auth: bool = False,
         guard_content_type: bool = True,
     ) -> bytes:
+        response = self._request_bytes_response(
+            method,
+            path,
+            json_body=json_body,
+            params=params,
+            headers=headers,
+            files=files,
+            data=data,
+            no_auth=no_auth,
+            guard_content_type=guard_content_type,
+        )
+        return response.content
+
+    def _request_bytes_response(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: Any = None,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        files: Mapping[str, Any] | None = None,
+        data: Mapping[str, Any] | None = None,
+        no_auth: bool = False,
+        guard_content_type: bool = True,
+    ) -> httpx.Response:
+        """Like :meth:`_request_bytes` but returns the whole response.
+
+        For binary endpoints whose response *headers* matter too (the
+        ``/image/*`` methods read ``x-venice-*`` into ``ImageBytes.metadata``).
+        Same Accept default and content-type guard as ``_request_bytes``.
+        """
         response = self._send(
             method,
             path,
@@ -442,7 +506,7 @@ class VeniceClient(_BaseClient):
         )
         if guard_content_type:
             _guard_binary_content_type(response)
-        return response.content
+        return response
 
     @contextmanager
     def _request_stream(

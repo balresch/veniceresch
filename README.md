@@ -134,19 +134,46 @@ result = await client.image.generate(model="flux-dev", prompt="a red cube", widt
 png_bytes = await client.image.generate_binary(model="flux-dev", prompt="a red cube")
 
 # Edit — accepts bytes, Path, base64 string, or URL
-edited = await client.image.edit(image=Path("cat.png"), prompt="make it blue", model="flux-edit")
+edited = await client.image.edit(
+    image=Path("cat.png"),
+    prompt="make it blue",
+    model="flux-edit",
+    safe_mode=False,  # Venice defaults to True: NSFW output comes back blurred
+)
 
-# Multi-edit (up to 3 images)
+# Multi-edit (max image count is per model: capabilities.maxInputImages)
 combined = await client.image.multi_edit(
     images=[img1_bytes, img2_bytes],
     prompt="merge them",
-    model_id="flux-multi-edit",
+    model="flux-multi-edit",  # or model_id=, same thing (sent as modelId)
+    quality="high",
 )
 
 # Upscale / background-remove
 upscaled = await client.image.upscale(image=source_png, scale=2.0)
 cutout = await client.image.background_remove(image_url="https://x/pic.png")
 ```
+
+`edit` and `multi_edit` name every field of the spec's request schemas
+(`aspect_ratio`, `resolution`, `output_format`, `safe_mode`, `enhance_prompt`,
+`transparent_background`, …, plus `quality` on multi-edit); `**extra` still
+forwards anything newer.
+
+The binary methods (`generate_binary`, `edit`, `multi_edit`, `upscale`,
+`background_remove`) return `ImageBytes`: a real `bytes` subclass, so it
+writes to disk and compares like bytes, with Venice's response headers on
+`.metadata`. `image.generate()` exposes the same `.metadata`:
+
+```python
+edited = await client.image.edit(image=src, prompt="...", enhance_prompt=True)
+Path("out.png").write_bytes(edited)
+edited.metadata.is_blurred  # x-venice-is-blurred → bool | None
+edited.metadata.enhanced_prompt  # x-venice-enhanced-prompt, URL-decoded
+edited.metadata.headers  # every x-venice-* header, raw
+```
+
+Fields are `None` when Venice didn't send the header. Slicing or
+concatenating returns plain `bytes` without the metadata.
 
 ### OpenAI-compatible image alias
 

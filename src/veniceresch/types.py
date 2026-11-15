@@ -21,7 +21,8 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from pydantic import Field, ValidationError
+from pydantic import Field, PrivateAttr, ValidationError
+from typing_extensions import Self
 
 from veniceresch._base_model import VeniceBaseModel
 from veniceresch._generated import (
@@ -173,10 +174,79 @@ class ImageStylesResponse(VeniceBaseModel):
     object: str | None = None
 
 
+class ImageResponseMetadata(VeniceBaseModel):
+    """What Venice reports about an image in its response *headers*.
+
+    Read from the ``x-venice-*`` / ``X-Balance-Remaining`` headers of the
+    ``/image/*`` endpoints and attached as ``.metadata`` to both
+    :class:`ImageBytes` (binary methods) and :class:`GenerateImageResponse`
+    (``image.generate``). Every field is ``None`` when Venice didn't send the
+    header; which headers appear depends on the endpoint (upscale and
+    background-remove send little beyond the balance). ``headers`` keeps every
+    ``x-venice-*`` header verbatim (lower-cased names) for anything not
+    surfaced as a field.
+    """
+
+    is_blurred: bool | None = None
+    """``x-venice-is-blurred``: the image was blurred (``safe_mode`` on, NSFW output)."""
+    is_content_violation: bool | None = None
+    """``x-venice-is-content-violation``."""
+    content_violation_count: int | None = None
+    """``x-venice-content-violation-count`` (``image.generate`` with ``variants``)."""
+    enhanced_prompt: str | None = None
+    """``x-venice-enhanced-prompt``, URL-decoded: the prompt actually sent to the
+    model when ``enhance_prompt=True`` rewrote it."""
+    model_id: str | None = None
+    """``x-venice-model-id``."""
+    model_name: str | None = None
+    """``x-venice-model-name``."""
+    balance_remaining: float | None = None
+    """``X-Balance-Remaining``."""
+    model_deprecation_warning: str | None = None
+    """``x-venice-model-deprecation-warning``."""
+    model_deprecation_date: str | None = None
+    """``x-venice-model-deprecation-date``."""
+    deprecated: bool | None = None
+    """``x-venice-deprecated``: the requested model is deprecated."""
+    deprecated_replacement: str | None = None
+    """``x-venice-deprecated-replacement``: the suggested replacement model."""
+    content_type: str | None = None
+    """The response ``Content-Type`` (e.g. ``image/png``)."""
+    headers: dict[str, str] = Field(default_factory=dict)
+    """Every ``x-venice-*`` header (plus ``x-balance-remaining``), raw, lower-cased names."""
+
+
+class ImageBytes(bytes):
+    """Image bytes from a binary ``/image/*`` method, plus header metadata.
+
+    A real :class:`bytes` subclass, so existing code that treats the result as
+    bytes (writing it to disk, ``== b"..."``, ``base64.b64encode``) keeps
+    working. The extra is :attr:`metadata`, an :class:`ImageResponseMetadata`
+    read from Venice's response headers::
+
+        img = await client.image.edit(image=path, prompt="...")
+        Path("out.png").write_bytes(img)
+        if img.metadata.is_blurred:
+            ...
+
+    Operations that build new bytes (slicing, ``+``, ``bytes(img)``) return a
+    plain :class:`bytes` without the metadata.
+    """
+
+    metadata: ImageResponseMetadata
+
+    def __new__(cls, data: bytes = b"", metadata: ImageResponseMetadata | None = None) -> Self:
+        obj = super().__new__(cls, data)
+        obj.metadata = metadata if metadata is not None else ImageResponseMetadata()
+        return obj
+
+
 class GenerateImageResponse(VeniceBaseModel):
     """JSON response from ``POST /image/generate`` (when ``return_binary`` is false).
 
     For raw bytes, use :meth:`veniceresch.resources.image.AsyncImageResource.generate_binary`.
+    Response-header data (``is_blurred``, ``enhanced_prompt``, …) is on
+    :attr:`metadata`.
     """
 
     id: str | None = None
@@ -186,6 +256,15 @@ class GenerateImageResponse(VeniceBaseModel):
     ] = Field(default_factory=list)
     request: dict[str, Any] | None = None
     timing: dict[str, Any] | None = None
+
+    # Header-derived, not part of the JSON body: a private attribute so it stays
+    # out of model_dump() and can't collide with a future body field.
+    _metadata: ImageResponseMetadata = PrivateAttr(default_factory=ImageResponseMetadata)
+
+    @property
+    def metadata(self) -> ImageResponseMetadata:
+        """Venice's response-header data for this call (see :class:`ImageResponseMetadata`)."""
+        return self._metadata
 
 
 class OpenAIImageResponse(VeniceBaseModel):
@@ -656,6 +735,8 @@ __all__ = [
     "DecisionResponse",
     "EmbeddingsResponse",
     "GenerateImageResponse",
+    "ImageBytes",
+    "ImageResponseMetadata",
     "ImageStylesResponse",
     "ModelCompatibilityResponse",
     "ModelCompatibilitySchema",

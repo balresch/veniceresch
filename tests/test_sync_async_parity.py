@@ -73,6 +73,38 @@ async def test_multi_edit_parity(mock_api, async_client, sync_client):
     assert b'"model_id"' not in fp["content"]
 
 
+async def test_edit_named_fields_parity(mock_api, async_client, sync_client):
+    route = mock_api.post("/image/edit").respond(200, content=b"PNG")
+    kwargs = dict(
+        image=b"\x89PNG-one",
+        prompt="edit",
+        model="m",
+        aspect_ratio="1:1",
+        resolution="1K",
+        output_format="png",
+        safe_mode=False,
+        enhance_prompt=True,
+        disable_prompt_optimization_thinking=True,
+        transparent_background=True,
+        anon_user_id="u1",
+    )
+    await async_client.image.edit(**kwargs)
+    sync_client.image.edit(**kwargs)
+    fp = _assert_parity(route)
+    assert b'"safe_mode":false' in fp["content"].replace(b" ", b"")
+
+
+async def test_multi_edit_model_alias_parity(mock_api, async_client, sync_client):
+    route = mock_api.post("/image/multi-edit").respond(200, content=b"PNG")
+    kwargs = dict(
+        images=[b"\x89PNG-one"], prompt="merge", model="m", quality="low", safe_mode=False
+    )
+    await async_client.image.multi_edit(**kwargs)
+    sync_client.image.multi_edit(**kwargs)
+    fp = _assert_parity(route)
+    assert b'"modelId"' in fp["content"]
+
+
 # ---- image: return_binary forcing on generate / generate_binary -----------
 
 
