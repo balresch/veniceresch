@@ -818,3 +818,131 @@ were already explicit, so left unchanged.
   `client.chat.completions.create`; `client.responses` is its own API. README
   mostly handles this. Action: keep the alias boundaries explicit in docs. No
   code change.
+
+---
+
+## 0.8.0 follow-ups (2026-11-15)
+
+Items left open after 0.7.0 (2026-11-09) and 0.8.0 (2026-11-15) shipped,
+consciously deferred during those releases. Same self-contained /
+ordered-by-value convention as above. Develop in the project `.venv` (see
+`CLAUDE.md`), never the system Python.
+
+---
+
+## 14. Pin ruff to a minor version  — TODO
+
+**Priority: high, tiny.** Prevents surprise CI failures on untouched code.
+
+**Problem.** `pyproject.toml` has `"ruff>=0.6"` in the dev extras. CI installs
+the newest ruff on every run. During the 0.7.0 release, ruff 0.17 began
+formatting Python snippets inside Markdown files and failed CI on README
+snippets nobody had touched. Any future ruff minor can change the formatter or
+default rules the same way.
+
+**Fix.** Pin to the minor currently in use (`ruff --version`), e.g.
+`"ruff>=0.17,<0.18"`, and bump it deliberately in its own PR (run
+`ruff format .` and `ruff check .` there, commit the churn separately).
+Optionally do the same for mypy, which can add new strict errors on minors.
+
+**Acceptance:** CI's ruff version only changes when `pyproject.toml` does.
+
+---
+
+## 15. GitHub Release object for v0.7.0  — TODO
+
+**Priority: low, trivial.** v0.8.0 has a GitHub Release, v0.7.0 doesn't.
+
+**Fix.** `gh release create v0.7.0 --verify-tag --title "veniceresch 0.7.0"
+--notes-file <(the [0.7.0] section of CHANGELOG.md)`, as was done for v0.8.0.
+Do not use `--latest` (0.8.0 must stay "latest"): pass `--latest=false`.
+
+---
+
+## 16. Live-verify the `/billing/*` methods with an admin key  — TODO (needs user)
+
+**Priority: medium.** `billing.balance`, `billing.usage_history`,
+`billing.iter_usage_history` and `billing.usage_history_csv` (incl. the
+`x-next-cursor` header and the cursor-only continuation rule) have only ever
+run against respx mocks.
+
+**Why it's blocked.** `/billing/*` answers inference keys with 401 "Admin API
+key required". The repo's `VENICE_API_KEY` secret is a deliberately limited
+inference key. The integration tests already exist and skip without
+`VENICE_ADMIN_API_KEY`.
+
+**Fix.** The user creates an admin key and sets it from their own terminal
+(`gh secret set VENICE_ADMIN_API_KEY`). Never handle the admin key in a
+session. Then dispatch `integration.yml` (free tier is enough) and check that
+the billing tests ran (not skipped) and passed. Fix any wire drift they find.
+
+**Acceptance:** an `integration.yml` run where the five billing tests pass.
+
+---
+
+## 17. Make `video.wait_for_completion` succeed for direct-bytes models  (GH #10 option c)  — TODO
+
+**Priority: medium.** Since 0.8.0 (#10), direct-bytes video models make
+`video.retrieve()` / `wait_for_completion()` raise a typed
+`VeniceUnexpectedContentTypeError` when the job completes. That's clear, but it
+is still a failure on the success path. Venice answers `/video/retrieve` with
+the finished MP4 instead of a JSON status for these models, even with
+`Accept: application/json` (which the client already sends by default).
+
+**Fix (design).** Make `video.retrieve()` dual-shape, like
+`audio.voice_changer.retrieve` (`resources/audio.py`, `_vc_retrieve_result`):
+send via `_send`, branch on the response content type, and on `video/*` return
+`VideoRetrieveResponse(status="COMPLETED", video=<bytes>, content_type=...)`.
+Open questions:
+- Memory: a poll that hits completion pulls the whole video into memory. That's
+  probably fine, since `download()` does the same, but document it.
+- `retrieve_binary` / `download` stay as they are. `download()` could
+  short-circuit when `wait_for_completion` already returned bytes.
+- The added `video` field on `VideoRetrieveResponse` is additive (minor bump).
+
+**Tests:** respx: PROCESSING JSON, then MP4 bytes → `wait_for_completion`
+returns COMPLETED with `.video == mp4`. VPS-backed JSON COMPLETED is unchanged.
+A paid live check with the cheapest direct-bytes video model.
+
+**Acceptance:** `wait_for_completion` returns normally for both model families.
+
+---
+
+## 18. Wallet auth (`SIGN-IN-WITH-X`) on every route that accepts it  — TODO
+
+**Priority: low–medium; design first.** The spec's `siwx` security scheme is
+accepted on 29 operations (chat, responses, all image routes, embeddings,
+decisions, audio, video, augment, crypto, x402 reads). Only `audio` (voices),
+`crypto` and `x402` expose a `siwx_header=` argument today, so wallet-auth
+callers can't use the rest without a bearer key.
+
+**Design options.**
+- (a) Client-level: `AsyncVeniceClient(siwx_header=...)` or a header-provider
+  callable (signatures expire, so a static string may not be enough). When it's
+  set, send `SIGN-IN-WITH-X` and strip the bearer (`no_auth`-style), and make
+  `api_key` optional.
+- (b) Per-call `siwx_header=` on every method: very noisy.
+- Recommended: (a) with a callable, since it keeps resource signatures unchanged.
+
+Recount the routes from `vendor/venice-swagger.yaml` (operations whose
+`security` lists `siwx`) before starting; the spec moves. We still don't bundle
+a signer (Non-goals).
+
+---
+
+## 19. 1.0: remove the deprecated stubs  — TODO (major release only)
+
+**Priority: scheduled.** These were kept with `typing_extensions.deprecated`
+and promised for removal in 1.0:
+- `billing.usage` / `billing.iter_usage` (Venice retired `/billing/usage`, 410,
+  sunset 2026-09-16) → `usage_history` / `iter_usage_history`.
+- `video.transcribe` (retired `/video/transcriptions`, 410) → `chat.create`
+  with a `video_url` content part.
+- `image.upscale(enhance=...)` → `creativity=`.
+- The deprecated `BillingUsageResponse` / `VideoTranscriptionResponse` models in
+  `types.py`.
+
+**Fix.** Delete them (async + sync), their tests and their README/CLAUDE.md
+mentions, and add a `### Removed` CHANGELOG entry. Do this only as part of a
+deliberate 1.0 release: a major bump, so downstreams pinning `<1.0` are
+unaffected.

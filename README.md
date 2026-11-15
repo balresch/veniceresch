@@ -622,7 +622,15 @@ Types come from Venice's upstream OpenAPI spec, regenerated via
 `datamodel-code-generator`, writes `src/veniceresch/_generated.py`). Pass
 `--offline` to use the pinned `vendor/venice-swagger.yaml` instead.
 
+Work in a project virtualenv, not your system Python. A system-wide
+editable install points every other program on the machine at your working
+tree. On a shared host that can break services that import `veniceresch`
+(sandboxed ones can't even see the checkout), so the test suite refuses to run
+on a distro system interpreter.
+
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
 ruff check . && ruff format --check .
 mypy src/veniceresch
@@ -631,6 +639,9 @@ VENICE_API_KEY=... pytest tests/integration -m integration  # smoke
 VENICE_API_KEY=... VENICE_INTEGRATION_PAID=1 pytest tests/integration -m integration  # + billed jobs
 VENICE_ADMIN_API_KEY=... pytest tests/integration -m integration  # + admin-only (billing) checks
 ```
+
+Run `bash scripts/regen_types.sh` with the venv active too (it uses
+`datamodel-codegen` from the dev extras).
 
 ## Endpoint coverage
 
