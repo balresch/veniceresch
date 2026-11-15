@@ -3,6 +3,26 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+
+- **`video.retrieve()` / `audio.retrieve()` now succeed when Venice answers the
+  final poll with the finished file** (BACKLOG #17). Direct-bytes video models
+  (e.g. `seedance-2-0-mini-enhanced-reference-to-video`) and some queued audio
+  models (e.g. `elevenlabs-tts-*`) send the MP4 / audio itself instead of a
+  JSON status once the job completes. Since 0.8.0 that raised
+  `VeniceUnexpectedContentTypeError`; now the result is
+  `status="COMPLETED"` with the bytes on the new `VideoRetrieveResponse.video` /
+  `AudioRetrieveResponse.audio` field (plus `content_type`), so
+  `wait_for_completion()` returns normally for every model family. Media is
+  recognized by its `video/*` / `audio/*` / `application/octet-stream` content
+  type or by its container signature (so a mislabeled body works too); a
+  non-JSON text body (CDN page) still raises. Code that caught the 0.8.0 error
+  and fell back to `retrieve_binary()` / `download()` keeps working, but that
+  branch no longer triggers for these models. The bytes fields are excluded
+  from `repr()`.
+
 ## [0.8.0] — 2026-11-15
 
 Image edit ergonomics and typed model metadata, plus a fix for non-JSON 2xx

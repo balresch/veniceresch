@@ -884,7 +884,9 @@ the billing tests ran (not skipped) and passed. Fix any wire drift they find.
 
 ---
 
-## 17. Make `video.wait_for_completion` succeed for direct-bytes models  (GH #10 option c)  — TODO
+## 17. Make `video.wait_for_completion` succeed for direct-bytes models  (GH #10 option c)  — DONE
+
+**Done (2026-11-15).** `video.retrieve()` and (same problem, `elevenlabs-tts-*`) `audio.retrieve()` are dual-shape via `_content._retrieve_body`: a `{video|audio}/*` / `application/octet-stream` body or a known container signature (MP4 `ftyp`, ID3, MPEG frame sync, RIFF, fLaC, OggS) is the finished media, returned as `status="COMPLETED"` with bytes on `.video` / `.audio` (`repr=False`); everything else goes through `_parse_json_body`. `Accept` is unchanged (default `application/json`): both model families ignore it. `download()` / `retrieve_binary()` unchanged; callers use `result.video or await download(...)`. Real-world wire evidence: lewdresch #14's production log (seedance R2V MP4, `00 00 00 20 ftyp`). Paid live check added for the audio path (`test_audio_queue_direct_bytes_completion`); no video live check, since the direct-bytes model found is reference-to-video and needs an input image.
 
 **Priority: medium.** Since 0.8.0 (#10), direct-bytes video models make
 `video.retrieve()` / `wait_for_completion()` raise a typed

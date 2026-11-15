@@ -269,33 +269,63 @@ def test_complete_before_ready_raises_conflict(mock_api, sync_client):
         sync_client.video.complete(queue_id="q1")
 
 
-# ---- JSON retrieve hit by a direct-bytes MP4 (GH #10) --------------------
+# ---- direct-bytes models: retrieve returns the finished MP4 (BACKLOG #17) --
 
 # Direct-bytes models answer /video/retrieve with the finished MP4 once a job
-# completes. The leading 00 00 00 18 sniffs as UTF-32 in response.json(), so this
-# used to leak a bare UnicodeDecodeError.
+# completes, not a JSON status. retrieve() folds that into
+# VideoRetrieveResponse(status="COMPLETED", video=<bytes>). Before 0.8.0 it
+# leaked a UnicodeDecodeError (the leading 00 00 00 18 sniffs as UTF-32); in
+# 0.8.0 it raised VeniceUnexpectedContentTypeError (GH #10).
 _MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
 
 
-@pytest.mark.parametrize("content_type", ["video/mp4", "application/json"])
-async def test_retrieve_raises_typed_error_on_mp4_body(mock_api, async_client, content_type):
-    mock_api.post("/video/retrieve").respond(
-        200, content=_MP4, headers={"content-type": content_type}
-    )
-    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
-        await async_client.video.retrieve(model="v1", queue_id="q-123")
-    assert info.value.content_type == content_type
-    assert info.value.response.content == _MP4
-    assert "video.download" in str(info.value)
+@pytest.mark.parametrize(
+    "content_type", ["video/mp4", "application/octet-stream", "application/json", None]
+)
+async def test_retrieve_returns_completed_with_mp4_body(mock_api, async_client, content_type):
+    # A mislabeled (application/json) or unlabeled MP4 is recognized by its ftyp box.
+    route = mock_api.post("/video/retrieve").respond(200, content=_MP4)
+    route.return_value.headers.pop("content-type", None)
+    if content_type is not None:
+        route.return_value.headers["content-type"] = content_type
+    result = await async_client.video.retrieve(model="v1", queue_id="q-123")
+    assert result.status == "COMPLETED"
+    assert result.video == _MP4
+    assert result.content_type == content_type
+    assert "video=" not in repr(result)  # megabytes must not end up in logs
 
 
-def test_sync_retrieve_raises_typed_error_on_mp4_body(mock_api, sync_client):
+def test_sync_retrieve_returns_completed_with_mp4_body(mock_api, sync_client):
     mock_api.post("/video/retrieve").respond(
         200, content=_MP4, headers={"content-type": "video/mp4"}
     )
-    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
-        sync_client.video.retrieve(model="v1", queue_id="q-123")
-    assert info.value.response.content == _MP4
+    result = sync_client.video.retrieve(model="v1", queue_id="q-123")
+    assert result.status == "COMPLETED" and result.video == _MP4
+
+
+async def test_retrieve_json_status_has_no_video(mock_api, async_client):
+    # VPS-backed models: JSON COMPLETED status, unchanged; media via download().
+    mock_api.post("/video/retrieve").respond(200, json={"status": "COMPLETED"})
+    result = await async_client.video.retrieve(model="v1", queue_id="q-123")
+    assert result.status == "COMPLETED"
+    assert result.video is None and result.content_type is None
+
+
+async def test_retrieve_still_raises_on_html_body(mock_api, async_client):
+    # A textual non-JSON 2xx (CDN page) is neither media nor status.
+    mock_api.post("/video/retrieve").respond(
+        200, content=b"<html>502</html>", headers={"content-type": "text/html"}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError):
+        await async_client.video.retrieve(model="v1", queue_id="q-123")
+
+
+async def test_retrieve_empty_video_body_raises(mock_api, async_client):
+    mock_api.post("/video/retrieve").respond(
+        200, content=b"", headers={"content-type": "video/mp4"}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError):
+        await async_client.video.retrieve(model="v1", queue_id="q-123")
 
 
 def _processing_then_mp4():
@@ -311,25 +341,25 @@ def _processing_then_mp4():
     return handler, calls
 
 
-async def test_wait_raises_typed_error_when_direct_bytes_job_completes(async_client, mock_api):
+async def test_wait_succeeds_when_direct_bytes_job_completes(async_client, mock_api):
     handler, calls = _processing_then_mp4()
     mock_api.post("/video/retrieve").mock(side_effect=handler)
-    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
-        await async_client.video.wait_for_completion(
-            model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01
-        )
-    assert len(calls) == 2  # stops at completion; doesn't keep polling or hang
-    assert info.value.response.content == _MP4
+    result = await async_client.video.wait_for_completion(
+        model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01, raise_on_failed=True
+    )
+    assert len(calls) == 2  # stops at completion
+    assert result.status == "COMPLETED"
+    assert result.video == _MP4
 
 
-def test_sync_wait_raises_typed_error_when_direct_bytes_job_completes(sync_client, mock_api):
+def test_sync_wait_succeeds_when_direct_bytes_job_completes(sync_client, mock_api):
     handler, calls = _processing_then_mp4()
     mock_api.post("/video/retrieve").mock(side_effect=handler)
-    with pytest.raises(VeniceUnexpectedContentTypeError):
-        sync_client.video.wait_for_completion(
-            model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01
-        )
+    result = sync_client.video.wait_for_completion(
+        model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01
+    )
     assert len(calls) == 2
+    assert result.video == _MP4
 
 
 # ---- wait_for_completion --------------------------------------------------

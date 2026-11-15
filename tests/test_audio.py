@@ -430,3 +430,75 @@ async def test_voice_changer_complete(mock_api, async_client):
     result = await async_client.audio.voice_changer.complete(model="vc-1", queue_id="q1")
     assert json.loads(route.calls.last.request.content) == {"model": "vc-1", "queue_id": "q1"}
     assert result.success is True
+
+
+# ---- /audio/retrieve answering with the finished audio (BACKLOG #17) ------
+
+_MP3_ID3 = b"ID3\x04\x00\x00\x00\x00\x00\x00" + b"\x00" * 32
+_MP3_FRAME = b"\xff\xfb\x90\x64" + b"\x00" * 32
+_WAV = b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 32
+
+
+@pytest.mark.parametrize(
+    ("body", "content_type"),
+    [
+        (_MP3_ID3, "audio/mpeg"),
+        (_MP3_FRAME, "audio/mpeg"),
+        (_WAV, "audio/wav"),
+        (_MP3_ID3, "application/octet-stream"),
+        (_MP3_FRAME, "application/json"),  # mislabeled: recognized by frame sync
+        (_WAV, None),
+    ],
+)
+async def test_audio_retrieve_returns_completed_with_audio_body(
+    mock_api, async_client, body, content_type
+):
+    route = mock_api.post("/audio/retrieve").respond(200, content=body)
+    route.return_value.headers.pop("content-type", None)
+    if content_type is not None:
+        route.return_value.headers["content-type"] = content_type
+    result = await async_client.audio.retrieve(model="elevenlabs-tts-v3", queue_id="q1")
+    assert result.status == "COMPLETED"
+    assert result.audio == body
+    assert result.content_type == content_type
+    assert "audio=" not in repr(result)
+
+
+async def test_audio_wait_succeeds_when_job_returns_audio(mock_api, async_client):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) < 2:
+            return httpx.Response(200, json={"status": "PROCESSING"})
+        return httpx.Response(200, content=_MP3_ID3, headers={"content-type": "audio/mpeg"})
+
+    mock_api.post("/audio/retrieve").mock(side_effect=handler)
+    result = await async_client.audio.wait_for_completion(
+        model="elevenlabs-tts-v3", queue_id="q1", timeout_s=5.0, poll_interval_s=0.01
+    )
+    assert result.status == "COMPLETED" and result.audio == _MP3_ID3
+    assert len(calls) == 2
+
+
+def test_sync_audio_retrieve_json_status_has_no_audio(mock_api, sync_client):
+    mock_api.post("/audio/retrieve").respond(200, json={"status": "PROCESSING"})
+    result = sync_client.audio.retrieve(model="m", queue_id="q1")
+    assert result.status == "PROCESSING" and result.audio is None
+
+
+def test_sync_audio_retrieve_returns_audio(mock_api, sync_client):
+    mock_api.post("/audio/retrieve").respond(
+        200, content=_MP3_ID3, headers={"content-type": "audio/mpeg"}
+    )
+    assert sync_client.audio.retrieve(model="m", queue_id="q1").audio == _MP3_ID3
+
+
+async def test_audio_retrieve_utf16_bom_is_not_mistaken_for_mp3(mock_api, async_client):
+    # FF FE is the UTF-16 LE BOM, not an MPEG frame sync: still a JSON parse.
+    body = "\ufeff{}".encode("utf-16-le")
+    mock_api.post("/audio/retrieve").respond(
+        200, content=body, headers={"content-type": "application/json"}
+    )
+    result = await async_client.audio.retrieve(model="m", queue_id="q1")
+    assert result.audio is None
