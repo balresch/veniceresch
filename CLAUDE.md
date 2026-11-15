@@ -8,6 +8,8 @@ A typed, async-first Python client for the Venice.ai API. Venice publishes no of
 
 `CHANGELOG.md` tracks what shipped per release.
 
+`LANDSCAPE.md` compares veniceresch with the other Python SDKs for Venice (mainly venice-py) and records the positioning decisions: don't compete on breadth (no CLI, built-in retries, wallet signer or TEE), close cheap gaps in ways that fit the thin design, build on being spec-generated, thin and wire-correct. Read it before proposing new features. `BACKLOG.md` items #20+ come from it.
+
 ## Architecture — the split that matters
 
 Two distinct layers; they must stay distinct:

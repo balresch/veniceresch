@@ -914,7 +914,9 @@ A paid live check with the cheapest direct-bytes video model.
 
 ---
 
-## 18. Wallet auth (`SIGN-IN-WITH-X`) on every route that accepts it  — TODO
+## 18. Wallet auth (`SIGN-IN-WITH-X`) on every route that accepts it  — DEPRIORITIZED
+
+**Deprioritized (2026-11-15, see `LANDSCAPE.md`).** venice-py already covers wallet auth including EVM/Solana signing; x402 users will likely pick it. Revisit only if a concrete consumer needs wallet auth through veniceresch.
 
 **Priority: low–medium; design first.** The spec's `siwx` security scheme is
 accepted on 29 operations (chat, responses, all image routes, embeddings,
@@ -952,3 +954,148 @@ and promised for removal in 1.0:
 mentions, and add a `### Removed` CHANGELOG entry. Do this only as part of a
 deliberate 1.0 release: a major bump, so downstreams pinning `<1.0` are
 unaffected.
+
+---
+
+## Landscape follow-ups (2026-11-15)
+
+Derived from `LANDSCAPE.md`: don't compete with venice-py on breadth, close
+obvious gaps where it's cheap and fits the thin design, and build on the
+strengths (spec-generated, thin, wire-correct). Ordered by value / cost.
+
+---
+
+## 20. Spec-drift watch  — TODO
+
+**Priority: high, small. Strength: spec-generated.**
+
+**Problem.** We only notice Venice spec changes when someone re-runs
+`scripts/regen_types.sh`. The 20261108 sync happened months after some of
+those endpoints shipped.
+
+**Fix.** A scheduled workflow (weekly, alongside the integration smoke) that
+fetches the upstream swagger, compares it with `vendor/venice-swagger.yaml`
+(added/removed paths and operations, changed request/response schemas, the
+spec `info.version`), and opens or updates a single GitHub issue with the
+summary when they differ. No auto-regen; a human decides. Keep the diff script
+in `scripts/` so it also runs locally.
+
+**Acceptance:** a spec change upstream produces one issue with a readable
+summary within a week; no change produces nothing.
+
+---
+
+## 21. Spec-coverage guard test  — TODO
+
+**Priority: high, small. Strength: spec-generated.**
+
+**Problem.** "Covers 49 of 49 live paths" is maintained by hand in CLAUDE.md
+and README.
+
+**Fix.** A unit test that reads `vendor/venice-swagger.yaml` and asserts every
+`(method, path)` is either mapped to a resource method in an explicit table, or
+listed in an explicit exclusion list with a reason (e.g. `/systemone` alias,
+retired paths). A regen that adds a path then fails CI until it's wrapped or
+consciously excluded. Optionally generate the README coverage table from the
+same mapping.
+
+**Acceptance:** adding a path to the vendored spec without touching the mapping
+fails the suite.
+
+---
+
+## 22. Helpers for caller-owned retries  — TODO
+
+**Priority: high, small. Gap vs venice-py (retries on by default), done the thin way.**
+
+**Problem.** The SDK deliberately doesn't retry (Non-goals), but it also gives
+callers little to build a policy on: `VeniceRateLimitError` exposes no retry
+hint, and "which errors are retryable" is left to each caller (lewdresch has
+its own `retry.py`).
+
+**Fix.**
+- `VeniceRateLimitError.retry_after: float | None` from the `Retry-After`
+  header (seconds or HTTP date), if present. Also check for Venice's
+  `x-ratelimit-*` headers on a live 429 and surface the useful ones.
+- `veniceresch.is_retryable(exc) -> bool`: rate limit, 5xx, connection and
+  timeout errors are retryable; validation, auth, balance and content errors
+  are not.
+- A README recipe wiring both into `tenacity` or `stamina` (docs only, no new
+  dependency).
+
+**Acceptance:** a caller can write a correct backoff loop without importing
+private modules; no retry happens inside the SDK.
+
+---
+
+## 23. Streaming text helper  — TODO
+
+**Priority: medium, small. Gap vs venice-py (`stream.text_deltas()`).**
+
+**Fix.** A helper that yields just the text deltas from a chat stream, e.g.
+`async for text in veniceresch.text_deltas(stream)` (or a method on the
+returned iterator), sync and async, skipping chunks without content. Keep the
+raw chunk iterator as the primary API.
+
+**Acceptance:** the README streaming example no longer needs
+`chunk.choices[0]["delta"].get("content")` boilerplate.
+
+---
+
+## 24. Save helpers for images  — TODO
+
+**Priority: low, trivial. Gap vs venice-py (`response.save()`).**
+
+**Fix.** `ImageBytes.save(path)` (writes the bytes, returns the path) and
+`GenerateImageResponse.save_all(directory, prefix=...)` (decodes the base64
+`images`, picks the extension from the request format or the image magic
+bytes). Async callers can wrap in `asyncio.to_thread`.
+
+---
+
+## 25. Response metadata beyond images  — TODO (design first)
+
+**Priority: medium. Strength: wire correctness / headers.**
+
+**Problem.** The spec declares `X-Balance-Remaining` on 26 operations and the
+model-deprecation headers (`x-venice-model-deprecation-warning`,
+`x-venice-deprecated`, …) on 4, but only the image methods surface them
+(`ImageResponseMetadata`, 0.8.0). Chat callers can't see their remaining
+balance or that the model they use is being retired.
+
+**Design questions.** Generalize `ImageResponseMetadata` into a shared
+`ResponseMetadata` (keeping the image one as a subclass/alias), and attach it
+the same way as `GenerateImageResponse.metadata` (private attr + property) to
+chat, responses and embeddings results. Non-streaming first; for streams,
+expose it on the iterator object. Consider emitting a `DeprecationWarning`
+(once per model) when `x-venice-deprecated: true` comes back.
+
+**Acceptance:** `result.metadata.balance_remaining` and the deprecation fields
+work on chat completions, verified against the live API.
+
+---
+
+## 26. Runnable examples  — TODO
+
+**Priority: medium, small. Gap vs venice-py (~90 examples).**
+
+**Fix.** An `examples/` directory with about 8 short scripts: quick start
+(async + sync), streaming, image edit with a blur check, video
+`wait_for_completion` for both model families, queued audio, typed model
+metadata (`parsed_data()` + the aliases), error handling with the retry
+recipe from #22. CI byte-compiles them (and runs them under respx where
+cheap) so they can't rot.
+
+---
+
+## 27. Say what veniceresch is for  — TODO (README part needs no one; showcase part needs the user)
+
+**Priority: medium, trivial.**
+
+**Fix.** A short README section near the top: what veniceresch is (thin, typed,
+spec-generated, native sync + async, no hidden retries, Python 3.10+) and when
+to pick venice-py instead (CLI, built-in retries/rate limiting, x402 signing,
+TEE). Then, with the user's OK, a PR to `veniceai/builtinvenice` updating
+`content/projects/balresch-veniceresch.yaml` with the same one-line
+positioning.
+
