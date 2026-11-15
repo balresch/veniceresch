@@ -1,0 +1,60 @@
+name: Spec drift
+
+# Weekly check whether Venice's upstream OpenAPI spec has moved away from the
+# vendored copy (BACKLOG #20). On drift it opens one `spec-drift` issue, or
+# updates the open one when the summary changed. It never regenerates code:
+# a human runs scripts/regen_types.sh. See scripts/spec_drift.py.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays at 06:30 UTC, after the integration smoke.
+    - cron: "30 6 * * 1"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: compare upstream spec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install "pyyaml>=6"
+      - name: Compare upstream with vendor/venice-swagger.yaml
+        id: diff
+        run: |
+          set +e
+          python scripts/spec_drift.py --output drift.md
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # 0 = no drift, 1 = drift; anything else is a real failure
+          [ "$code" -le 1 ] || exit "$code"
+      - name: Open or update the spec-drift issue
+        if: steps.diff.outputs.code == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create spec-drift --color FBCA04 \
+            --description "Upstream Venice spec differs from vendor/" 2>/dev/null || true
+          number=$(gh issue list --label spec-drift --state open --json number --jq '.[0].number // empty')
+          if [ -z "$number" ]; then
+            gh issue create --title "Upstream Venice spec changed" --label spec-drift --body-file drift.md
+          else
+            gh issue view "$number" --json body --jq .body > current.md
+            if ! diff -q <(sed -e '$a\' current.md) <(sed -e '$a\' drift.md) >/dev/null; then
+              gh issue edit "$number" --body-file drift.md
+              gh issue comment "$number" --body "Upstream spec moved again; the summary above is updated."
+            else
+              echo "Open issue #$number already describes this drift."
+            fi
+          fi
