@@ -3,7 +3,9 @@
 Covers ``/image/generate`` (JSON by default, raw bytes via
 :meth:`AsyncImageResource.generate_binary`), ``/image/edit``,
 ``/image/multi-edit``, ``/image/upscale``, ``/image/background-remove``
-(all of which return raw PNG bytes), and ``/image/styles``.
+(all of which return :class:`~veniceresch.types.ImageBytes`: real ``bytes``
+plus the ``x-venice-*`` response headers on ``.metadata``), and
+``/image/styles``.
 
 Image inputs accept :class:`bytes` (raw image data — we base64-encode for you),
 :class:`str` (already-encoded base64 or a URL — passed through as-is),
@@ -27,10 +29,19 @@ import warnings
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, Literal
+from urllib.parse import unquote_plus
 
-from veniceresch.types import GenerateImageResponse, ImageStylesResponse
+from veniceresch._content import _parse_json_body
+from veniceresch.types import (
+    GenerateImageResponse,
+    ImageBytes,
+    ImageResponseMetadata,
+    ImageStylesResponse,
+)
 
 if TYPE_CHECKING:
+    import httpx
+
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
@@ -81,6 +92,136 @@ async def _encode_image_async(image: ImageInput) -> str:
 
 def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
+
+
+def _bool_header(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    if lowered in ("true", "1"):
+        return True
+    if lowered in ("false", "0"):
+        return False
+    return None
+
+
+def _number_header(value: str | None, kind: type[int] | type[float]) -> Any:
+    if value is None:
+        return None
+    try:
+        return kind(value.strip())
+    except ValueError:
+        return None
+
+
+def _image_metadata(response: httpx.Response) -> ImageResponseMetadata:
+    """Read Venice's ``x-venice-*`` / ``X-Balance-Remaining`` image headers.
+
+    Tolerant by design: a missing or unparseable header becomes ``None`` rather
+    than an error, and every ``x-venice-*`` header is kept raw on ``headers``.
+    """
+    h = response.headers
+    enhanced = h.get("x-venice-enhanced-prompt")
+    return ImageResponseMetadata(
+        is_blurred=_bool_header(h.get("x-venice-is-blurred")),
+        is_content_violation=_bool_header(h.get("x-venice-is-content-violation")),
+        content_violation_count=_number_header(h.get("x-venice-content-violation-count"), int),
+        enhanced_prompt=unquote_plus(enhanced) if enhanced is not None else None,
+        model_id=h.get("x-venice-model-id"),
+        model_name=h.get("x-venice-model-name"),
+        balance_remaining=_number_header(h.get("x-balance-remaining"), float),
+        model_deprecation_warning=h.get("x-venice-model-deprecation-warning"),
+        model_deprecation_date=h.get("x-venice-model-deprecation-date"),
+        deprecated=_bool_header(h.get("x-venice-deprecated")),
+        deprecated_replacement=h.get("x-venice-deprecated-replacement"),
+        content_type=h.get("content-type"),
+        headers={
+            name.lower(): value
+            for name, value in h.items()
+            if name.lower().startswith("x-venice-") or name.lower() == "x-balance-remaining"
+        },
+    )
+
+
+def _image_bytes(response: httpx.Response) -> ImageBytes:
+    return ImageBytes(response.content, _image_metadata(response))
+
+
+def _generate_result(response: httpx.Response) -> GenerateImageResponse:
+    result = GenerateImageResponse.model_validate(_parse_json_body(response, "/image/generate"))
+    result._metadata = _image_metadata(response)
+    return result
+
+
+def _edit_body(
+    *,
+    image: str,
+    prompt: str,
+    model: str | None,
+    aspect_ratio: str | None,
+    resolution: str | None,
+    output_format: ImageFormat | None,
+    safe_mode: bool | None,
+    enhance_prompt: bool | None,
+    disable_prompt_optimization_thinking: bool | None,
+    transparent_background: bool | None,
+    anon_user_id: str | None,
+    extra: dict[str, Any],
+) -> dict[str, Any]:
+    return _drop_none(
+        {
+            "image": image,
+            "prompt": prompt,
+            "model": model,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "output_format": output_format,
+            "safe_mode": safe_mode,
+            "enhance_prompt": enhance_prompt,
+            "disable_prompt_optimization_thinking": disable_prompt_optimization_thinking,
+            "transparent_background": transparent_background,
+            "anon_user_id": anon_user_id,
+            **extra,
+        }
+    )
+
+
+def _multi_edit_body(
+    *,
+    images: list[str],
+    prompt: str,
+    model_id: str | None,
+    model: str | None,
+    aspect_ratio: str | None,
+    resolution: str | None,
+    quality: ImageQuality | None,
+    output_format: ImageFormat | None,
+    safe_mode: bool | None,
+    enhance_prompt: bool | None,
+    disable_prompt_optimization_thinking: bool | None,
+    transparent_background: bool | None,
+    anon_user_id: str | None,
+    extra: dict[str, Any],
+) -> dict[str, Any]:
+    if model_id is not None and model is not None:
+        raise ValueError("Pass model= or model_id= to multi_edit, not both (they are aliases).")
+    return _drop_none(
+        {
+            "images": images,
+            "prompt": prompt,
+            "modelId": model if model is not None else model_id,
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            "quality": quality,
+            "output_format": output_format,
+            "safe_mode": safe_mode,
+            "enhance_prompt": enhance_prompt,
+            "disable_prompt_optimization_thinking": disable_prompt_optimization_thinking,
+            "transparent_background": transparent_background,
+            "anon_user_id": anon_user_id,
+            **extra,
+        }
+    )
 
 
 def _style_reference(ref: StyleReference, image: str) -> dict[str, Any]:
@@ -257,8 +398,10 @@ class AsyncImageResource:
             extra=extra,
         )
         body.pop("return_binary", None)  # force JSON mode on this method
-        raw = await self._client._request_json("POST", "/image/generate", json_body=body)
-        return GenerateImageResponse.model_validate(raw)
+        response = await self._client._send(
+            "POST", "/image/generate", json_body=body, params=None, headers=None
+        )
+        return _generate_result(response)
 
     async def generate_binary(
         self,
@@ -288,8 +431,12 @@ class AsyncImageResource:
         style_references: Sequence[StyleReference] | None = None,
         anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
-        """Generate an image and return raw image bytes (PNG/JPEG/WebP)."""
+    ) -> ImageBytes:
+        """Generate an image and return its bytes (PNG/JPEG/WebP).
+
+        Returns :class:`~veniceresch.types.ImageBytes`; header data such as
+        ``is_blurred`` is on ``result.metadata``.
+        """
         body = _build_generate_body(
             model=model,
             prompt=prompt,
@@ -318,7 +465,9 @@ class AsyncImageResource:
             extra=extra,
         )
         body["return_binary"] = True
-        return await self._client._request_bytes("POST", "/image/generate", json_body=body)
+        return _image_bytes(
+            await self._client._request_bytes_response("POST", "/image/generate", json_body=body)
+        )
 
     async def edit(
         self,
@@ -326,40 +475,87 @@ class AsyncImageResource:
         image: ImageInput,
         prompt: str,
         model: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        output_format: ImageFormat | None = None,
+        safe_mode: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        transparent_background: bool | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
-        """Edit an image with a text prompt. Returns raw PNG bytes."""
-        body = _drop_none(
-            {
-                "image": await _encode_image_async(image),
-                "prompt": prompt,
-                "model": model,
-                **extra,
-            }
+    ) -> ImageBytes:
+        """Edit an image with a text prompt. Returns :class:`~veniceresch.types.ImageBytes`.
+
+        ``safe_mode`` defaults to **true** on Venice's side, so NSFW output comes
+        back blurred unless you pass ``safe_mode=False``; check
+        ``result.metadata.is_blurred``. With ``enhance_prompt=True`` the
+        rewritten prompt is on ``result.metadata.enhanced_prompt``. Fields not
+        named here can still be passed through ``**extra``.
+        """
+        body = _edit_body(
+            image=await _encode_image_async(image),
+            prompt=prompt,
+            model=model,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            output_format=output_format,
+            safe_mode=safe_mode,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            transparent_background=transparent_background,
+            anon_user_id=anon_user_id,
+            extra=extra,
         )
-        return await self._client._request_bytes("POST", "/image/edit", json_body=body)
+        return _image_bytes(
+            await self._client._request_bytes_response("POST", "/image/edit", json_body=body)
+        )
 
     async def multi_edit(
         self,
         *,
         images: list[ImageInput],
         prompt: str,
-        model_id: str,
+        model_id: str | None = None,
+        model: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: ImageQuality | None = None,
+        output_format: ImageFormat | None = None,
+        safe_mode: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        transparent_background: bool | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
-        """Edit up to 3 images together. Returns raw PNG bytes.
+    ) -> ImageBytes:
+        """Edit several images together. Returns :class:`~veniceresch.types.ImageBytes`.
 
-        The spec field is ``modelId``; we accept ``model_id`` and translate.
+        The maximum number of ``images`` is model-specific: see
+        ``model_spec.capabilities.maxInputImages`` from ``models.list()``.
+        ``model=`` and ``model_id=`` are aliases (the spec field is ``modelId``);
+        pass at most one. Venice defaults to ``firered-image-edit`` when neither
+        is given. ``safe_mode`` / ``enhance_prompt`` behave as on :meth:`edit`.
         """
-        body = _drop_none(
-            {
-                "images": [await _encode_image_async(img) for img in images],
-                "prompt": prompt,
-                "modelId": model_id,
-                **extra,
-            }
+        body = _multi_edit_body(
+            images=[await _encode_image_async(img) for img in images],
+            prompt=prompt,
+            model_id=model_id,
+            model=model,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            quality=quality,
+            output_format=output_format,
+            safe_mode=safe_mode,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            transparent_background=transparent_background,
+            anon_user_id=anon_user_id,
+            extra=extra,
         )
-        return await self._client._request_bytes("POST", "/image/multi-edit", json_body=body)
+        return _image_bytes(
+            await self._client._request_bytes_response("POST", "/image/multi-edit", json_body=body)
+        )
 
     async def upscale(
         self,
@@ -369,8 +565,8 @@ class AsyncImageResource:
         creativity: float | None = None,
         enhance: bool | None = None,
         **extra: Any,
-    ) -> bytes:
-        """Upscale an image. Returns raw PNG bytes.
+    ) -> ImageBytes:
+        """Upscale an image. Returns :class:`~veniceresch.types.ImageBytes`.
 
         ``creativity`` (Venice clamps it to 0-0.02, default 0.01) controls how
         much detail and texture the upscaler adds. ``enhance`` is deprecated —
@@ -378,7 +574,9 @@ class AsyncImageResource:
         :class:`DeprecationWarning` (it is still forwarded in 0.7).
         """
         body = _upscale_body(await _encode_image_async(image), scale, creativity, enhance, extra)
-        return await self._client._request_bytes("POST", "/image/upscale", json_body=body)
+        return _image_bytes(
+            await self._client._request_bytes_response("POST", "/image/upscale", json_body=body)
+        )
 
     async def background_remove(
         self,
@@ -387,8 +585,8 @@ class AsyncImageResource:
         image_url: str | None = None,
         anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
-        """Remove the background from an image. Returns raw PNG bytes.
+    ) -> ImageBytes:
+        """Remove the background from an image. Returns :class:`~veniceresch.types.ImageBytes`.
 
         Accepts either ``image=`` (bytes/path/base64) or ``image_url=``.
         """
@@ -400,7 +598,11 @@ class AsyncImageResource:
         if image_url is not None:
             body["image_url"] = image_url
         body.update(_drop_none({"anon_user_id": anon_user_id, **extra}))
-        return await self._client._request_bytes("POST", "/image/background-remove", json_body=body)
+        return _image_bytes(
+            await self._client._request_bytes_response(
+                "POST", "/image/background-remove", json_body=body
+            )
+        )
 
     async def list_styles(self) -> ImageStylesResponse:
         """List available ``style_preset`` values for :meth:`generate`."""
@@ -471,8 +673,10 @@ class ImageResource:
             extra=extra,
         )
         body.pop("return_binary", None)
-        raw = self._client._request_json("POST", "/image/generate", json_body=body)
-        return GenerateImageResponse.model_validate(raw)
+        response = self._client._send(
+            "POST", "/image/generate", json_body=body, params=None, headers=None
+        )
+        return _generate_result(response)
 
     def generate_binary(
         self,
@@ -502,7 +706,7 @@ class ImageResource:
         style_references: Sequence[StyleReference] | None = None,
         anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
+    ) -> ImageBytes:
         body = _build_generate_body(
             model=model,
             prompt=prompt,
@@ -531,7 +735,9 @@ class ImageResource:
             extra=extra,
         )
         body["return_binary"] = True
-        return self._client._request_bytes("POST", "/image/generate", json_body=body)
+        return _image_bytes(
+            self._client._request_bytes_response("POST", "/image/generate", json_body=body)
+        )
 
     def edit(
         self,
@@ -539,35 +745,73 @@ class ImageResource:
         image: ImageInput,
         prompt: str,
         model: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        output_format: ImageFormat | None = None,
+        safe_mode: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        transparent_background: bool | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
-        body = _drop_none(
-            {
-                "image": _encode_image(image),
-                "prompt": prompt,
-                "model": model,
-                **extra,
-            }
+    ) -> ImageBytes:
+        """Sync mirror of :meth:`AsyncImageResource.edit`."""
+        body = _edit_body(
+            image=_encode_image(image),
+            prompt=prompt,
+            model=model,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            output_format=output_format,
+            safe_mode=safe_mode,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            transparent_background=transparent_background,
+            anon_user_id=anon_user_id,
+            extra=extra,
         )
-        return self._client._request_bytes("POST", "/image/edit", json_body=body)
+        return _image_bytes(
+            self._client._request_bytes_response("POST", "/image/edit", json_body=body)
+        )
 
     def multi_edit(
         self,
         *,
         images: list[ImageInput],
         prompt: str,
-        model_id: str,
+        model_id: str | None = None,
+        model: str | None = None,
+        aspect_ratio: str | None = None,
+        resolution: str | None = None,
+        quality: ImageQuality | None = None,
+        output_format: ImageFormat | None = None,
+        safe_mode: bool | None = None,
+        enhance_prompt: bool | None = None,
+        disable_prompt_optimization_thinking: bool | None = None,
+        transparent_background: bool | None = None,
+        anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
-        body = _drop_none(
-            {
-                "images": [_encode_image(img) for img in images],
-                "prompt": prompt,
-                "modelId": model_id,
-                **extra,
-            }
+    ) -> ImageBytes:
+        """Sync mirror of :meth:`AsyncImageResource.multi_edit`."""
+        body = _multi_edit_body(
+            images=[_encode_image(img) for img in images],
+            prompt=prompt,
+            model_id=model_id,
+            model=model,
+            aspect_ratio=aspect_ratio,
+            resolution=resolution,
+            quality=quality,
+            output_format=output_format,
+            safe_mode=safe_mode,
+            enhance_prompt=enhance_prompt,
+            disable_prompt_optimization_thinking=disable_prompt_optimization_thinking,
+            transparent_background=transparent_background,
+            anon_user_id=anon_user_id,
+            extra=extra,
         )
-        return self._client._request_bytes("POST", "/image/multi-edit", json_body=body)
+        return _image_bytes(
+            self._client._request_bytes_response("POST", "/image/multi-edit", json_body=body)
+        )
 
     def upscale(
         self,
@@ -577,10 +821,12 @@ class ImageResource:
         creativity: float | None = None,
         enhance: bool | None = None,
         **extra: Any,
-    ) -> bytes:
+    ) -> ImageBytes:
         """Sync mirror of :meth:`AsyncImageResource.upscale`."""
         body = _upscale_body(_encode_image(image), scale, creativity, enhance, extra)
-        return self._client._request_bytes("POST", "/image/upscale", json_body=body)
+        return _image_bytes(
+            self._client._request_bytes_response("POST", "/image/upscale", json_body=body)
+        )
 
     def background_remove(
         self,
@@ -589,7 +835,7 @@ class ImageResource:
         image_url: str | None = None,
         anon_user_id: str | None = None,
         **extra: Any,
-    ) -> bytes:
+    ) -> ImageBytes:
         if image is None and image_url is None:
             raise ValueError("Must supply either image= or image_url=.")
         body: dict[str, Any] = {}
@@ -598,7 +844,9 @@ class ImageResource:
         if image_url is not None:
             body["image_url"] = image_url
         body.update(_drop_none({"anon_user_id": anon_user_id, **extra}))
-        return self._client._request_bytes("POST", "/image/background-remove", json_body=body)
+        return _image_bytes(
+            self._client._request_bytes_response("POST", "/image/background-remove", json_body=body)
+        )
 
     def list_styles(self) -> ImageStylesResponse:
         raw = self._client._request_json("GET", "/image/styles")

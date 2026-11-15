@@ -5,6 +5,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **Image response headers on `.metadata`** (#13). The binary image methods
+  (`generate_binary`, `edit`, `multi_edit`, `upscale`, `background_remove`)
+  now return `ImageBytes`, a `bytes` subclass carrying an
+  `ImageResponseMetadata` on `.metadata`: `is_blurred`,
+  `is_content_violation`, `content_violation_count`, `enhanced_prompt`
+  (URL-decoded), `model_id`, `model_name`, `balance_remaining`, the
+  deprecation headers, `content_type`, and every `x-venice-*` header raw on
+  `headers`. `image.generate()` (JSON) exposes the same `.metadata` on
+  `GenerateImageResponse`. Code that treats the result as `bytes` keeps
+  working unchanged.
+- **Named parameters on `image.edit()` / `image.multi_edit()`** (#12) for every
+  field of `EditImageRequest` / `MultiEditImageRequest`: `aspect_ratio`,
+  `resolution`, `output_format`, `safe_mode`, `enhance_prompt`,
+  `disable_prompt_optimization_thinking`, `transparent_background`,
+  `anon_user_id`, plus `quality` on multi-edit. Previously these were only
+  reachable through untyped `**extra` (which still works). Note `safe_mode`
+  defaults to true on Venice's side, so NSFW edits come back blurred unless you
+  pass `safe_mode=False`.
+- **`multi_edit(model=...)`** as an alias for `model_id=`, matching `edit`.
+  Passing both raises `ValueError`.
+
+### Changed
+
+- `image.multi_edit()`'s `model_id` is now optional, as in the spec (Venice
+  defaults to `firered-image-edit`). The docstring's "up to 3 images" is
+  replaced by a pointer to the model's `capabilities.maxInputImages`.
+
 ### Fixed
 
 - **JSON methods no longer leak a raw `UnicodeDecodeError` / `JSONDecodeError`

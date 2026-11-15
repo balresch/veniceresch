@@ -322,3 +322,223 @@ async def test_background_remove_forwards_anon_user_id(mock_api, async_client):
         "image_url": "https://x/pic.png",
         "anon_user_id": "u1",
     }
+
+
+# ---- #12: named EditImageRequest / MultiEditImageRequest fields -----------
+
+_EDIT_FIELDS = dict(
+    aspect_ratio="16:9",
+    resolution="2K",
+    output_format="webp",
+    safe_mode=False,
+    enhance_prompt=True,
+    disable_prompt_optimization_thinking=True,
+    transparent_background=False,
+    anon_user_id="end-user-1",
+)
+
+
+async def test_edit_forwards_named_fields(mock_api, async_client):
+    route = mock_api.post("/image/edit").respond(200, content=SAMPLE_BYTES)
+    await async_client.image.edit(
+        image="https://x/img.png", prompt="p", model="m", **_EDIT_FIELDS, future_field=1
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "image": "https://x/img.png",
+        "prompt": "p",
+        "model": "m",
+        "future_field": 1,
+        **_EDIT_FIELDS,
+    }
+
+
+async def test_edit_omits_unset_fields(mock_api, async_client):
+    # safe_mode etc. default to None → not sent, so Venice's own defaults apply.
+    route = mock_api.post("/image/edit").respond(200, content=SAMPLE_BYTES)
+    await async_client.image.edit(image="https://x/img.png", prompt="p")
+    assert json.loads(route.calls.last.request.content) == {
+        "image": "https://x/img.png",
+        "prompt": "p",
+    }
+
+
+async def test_multi_edit_forwards_named_fields(mock_api, async_client):
+    route = mock_api.post("/image/multi-edit").respond(200, content=SAMPLE_BYTES)
+    await async_client.image.multi_edit(
+        images=["https://x/a.png", "https://x/b.png"],
+        prompt="p",
+        model_id="m",
+        quality="high",
+        **_EDIT_FIELDS,
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "images": ["https://x/a.png", "https://x/b.png"],
+        "prompt": "p",
+        "modelId": "m",
+        "quality": "high",
+        **_EDIT_FIELDS,
+    }
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [({"model": "m"}, {"modelId": "m"}), ({"model_id": "m"}, {"modelId": "m"}), ({}, {})],
+)
+def test_multi_edit_model_alias(mock_api, sync_client, kwargs, expected):
+    # model_id is now optional (spec default firered-image-edit); model= is an alias.
+    route = mock_api.post("/image/multi-edit").respond(200, content=SAMPLE_BYTES)
+    sync_client.image.multi_edit(images=["u"], prompt="p", **kwargs)
+    assert json.loads(route.calls.last.request.content) == {
+        "images": ["u"],
+        "prompt": "p",
+        **expected,
+    }
+
+
+async def test_multi_edit_rejects_model_and_model_id(mock_api, async_client):
+    route = mock_api.post("/image/multi-edit").respond(200, content=SAMPLE_BYTES)
+    with pytest.raises(ValueError, match="not both"):
+        await async_client.image.multi_edit(images=["u"], prompt="p", model="a", model_id="b")
+    assert not route.called
+
+
+# ---- #13: x-venice-* response headers on ImageBytes.metadata ---------------
+
+_HEADERS = {
+    "content-type": "image/png",
+    "x-venice-is-blurred": "true",
+    "x-venice-is-content-violation": "false",
+    "x-venice-enhanced-prompt": "a%20red%20cube%2C+glossy%20%2B%20shiny",
+    "x-venice-model-id": "qwen-edit",
+    "x-venice-model-name": "Qwen Edit",
+    "x-venice-deprecated": "false",
+    "X-Balance-Remaining": "12.5",
+    "x-unrelated": "ignored",
+}
+
+
+async def test_edit_surfaces_header_metadata(mock_api, async_client):
+    from veniceresch.types import ImageBytes
+
+    mock_api.post("/image/edit").respond(200, content=SAMPLE_BYTES, headers=_HEADERS)
+    result = await async_client.image.edit(image="u", prompt="p")
+    # Still bytes for existing callers.
+    assert isinstance(result, bytes) and isinstance(result, ImageBytes)
+    assert result == SAMPLE_BYTES
+    meta = result.metadata
+    assert meta.is_blurred is True
+    assert meta.is_content_violation is False
+    assert meta.enhanced_prompt == "a red cube, glossy + shiny"
+    assert meta.model_id == "qwen-edit"
+    assert meta.model_name == "Qwen Edit"
+    assert meta.deprecated is False
+    assert meta.balance_remaining == 12.5
+    assert meta.content_type == "image/png"
+    assert meta.content_violation_count is None
+    assert meta.headers == {
+        "x-venice-is-blurred": "true",
+        "x-venice-is-content-violation": "false",
+        "x-venice-enhanced-prompt": "a%20red%20cube%2C+glossy%20%2B%20shiny",
+        "x-venice-model-id": "qwen-edit",
+        "x-venice-model-name": "Qwen Edit",
+        "x-venice-deprecated": "false",
+        "x-balance-remaining": "12.5",
+    }
+
+
+async def test_metadata_tolerates_missing_and_garbled_headers(mock_api, async_client):
+    mock_api.post("/image/edit").respond(
+        200,
+        content=SAMPLE_BYTES,
+        headers={
+            "content-type": "image/png",
+            "x-venice-is-blurred": "maybe",
+            "x-venice-content-violation-count": "lots",
+            "X-Balance-Remaining": "n/a",
+        },
+    )
+    meta = (await async_client.image.edit(image="u", prompt="p")).metadata
+    assert meta.is_blurred is None
+    assert meta.content_violation_count is None
+    assert meta.balance_remaining is None
+    assert meta.enhanced_prompt is None
+    assert meta.headers["x-venice-is-blurred"] == "maybe"
+
+
+@pytest.mark.parametrize("is_async", [True, False])
+@pytest.mark.parametrize(
+    ("path", "method", "kwargs"),
+    [
+        ("/image/generate", "generate_binary", {"model": "m", "prompt": "p"}),
+        ("/image/edit", "edit", {"image": "u", "prompt": "p"}),
+        ("/image/multi-edit", "multi_edit", {"images": ["u"], "prompt": "p"}),
+        ("/image/upscale", "upscale", {"image": "u"}),
+        ("/image/background-remove", "background_remove", {"image_url": "u"}),
+    ],
+)
+async def test_all_binary_methods_return_image_bytes(
+    mock_api, async_client, sync_client, is_async, path, method, kwargs
+):
+    from veniceresch.types import ImageBytes
+
+    mock_api.post(path).respond(
+        200, content=SAMPLE_BYTES, headers={"content-type": "image/png", "x-venice-is-blurred": "1"}
+    )
+    client = async_client if is_async else sync_client
+    result = getattr(client.image, method)(**kwargs)
+    if is_async:
+        result = await result
+    assert type(result) is ImageBytes
+    assert result == SAMPLE_BYTES
+    assert result.metadata.is_blurred is True
+
+
+async def test_generate_json_surfaces_header_metadata(mock_api, async_client):
+    mock_api.post("/image/generate").respond(
+        200,
+        json={"images": [SAMPLE_B64]},
+        headers={"x-venice-is-blurred": "true", "x-venice-content-violation-count": "1"},
+    )
+    result = await async_client.image.generate(model="m", prompt="p")
+    assert result.images == [SAMPLE_B64]
+    assert result.metadata.is_blurred is True
+    assert result.metadata.content_violation_count == 1
+    # Header data is not part of the JSON body.
+    assert "metadata" not in result.model_dump()
+
+
+def test_sync_generate_json_surfaces_header_metadata(mock_api, sync_client):
+    mock_api.post("/image/generate").respond(
+        200, json={"images": []}, headers={"x-venice-enhanced-prompt": "x%20y"}
+    )
+    assert sync_client.image.generate(model="m", prompt="p").metadata.enhanced_prompt == "x y"
+
+
+async def test_generate_json_still_maps_errors_and_bad_bodies(mock_api, async_client):
+    from veniceresch import VeniceRateLimitError, VeniceUnexpectedContentTypeError
+
+    route = mock_api.post("/image/generate")
+    route.respond(429, json={"error": "slow down"})
+    with pytest.raises(VeniceRateLimitError):
+        await async_client.image.generate(model="m", prompt="p")
+    route.respond(200, content=SAMPLE_BYTES, headers={"content-type": "image/png"})
+    with pytest.raises(VeniceUnexpectedContentTypeError):
+        await async_client.image.generate(model="m", prompt="p")
+
+
+def test_image_bytes_constructs_and_pickles():
+    import copy
+    import pickle
+
+    from veniceresch.types import ImageBytes, ImageResponseMetadata
+
+    plain = ImageBytes(b"abc")
+    assert plain == b"abc" and plain.metadata == ImageResponseMetadata()
+    img = ImageBytes(b"abc", ImageResponseMetadata(is_blurred=True))
+    for clone in (pickle.loads(pickle.dumps(img)), copy.deepcopy(img)):
+        assert type(clone) is ImageBytes
+        assert clone == b"abc" and clone.metadata.is_blurred is True
+    # New bytes built from it are plain bytes (documented).
+    assert type(img[:1]) is bytes
