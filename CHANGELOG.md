@@ -28,6 +28,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - **`multi_edit(model=...)`** as an alias for `model_id=`, matching `edit`.
   Passing both raises `ValueError`.
 
+- **Public types for typed model metadata** (#9). `veniceresch.types` now
+  exports `ModelSpec`, `ModelCapabilities`, `ModelType` (the model kind:
+  `text`, `image`, `tts`, …) and `VideoModelType` (`text-to-video` /
+  `image-to-video` / `video`), plus semantic aliases for every
+  `model_spec.constraints` / `.pricing` variant that `ModelList.parsed_data()`
+  can return: `TextModelConstraints`, `ImageModelConstraints`,
+  `VideoModelConstraints`, `InpaintModelConstraints`, `TextModelPricing`,
+  `ImageModelPricing`, `TtsModelPricing`, `AsrModelPricing`,
+  `InpaintModelPricing`, `MusicGenerationPricing`, `MusicPerSecondPricing`,
+  `DurationTierPricing`, `PerThousandCharactersPricing`, and the unions
+  `ModelConstraints` / `ModelPricing`. Use these for `isinstance` narrowing
+  instead of the numbered `_generated` classes (`Constraints1`, `Pricing4`,
+  `Type99`), whose names are positional and can shift on a spec regen. A unit
+  test pins each alias to its fields so a reshuffle fails CI. Note: the
+  generated class called `ModelType` is the *video* enum; the public
+  `ModelType` is the model kind.
+
 ### Changed
 
 - `image.multi_edit()`'s `model_id` is now optional, as in the spec (Venice
