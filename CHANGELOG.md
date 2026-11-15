@@ -3,6 +3,23 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+
+- **JSON methods no longer leak a raw `UnicodeDecodeError` / `JSONDecodeError`
+  on a 2xx body that isn't JSON** (#10). Venice's direct-bytes video models
+  answer `/video/retrieve` with the finished MP4 once a job completes, so
+  `video.retrieve()`, and with it `video.wait_for_completion()`, crashed with a
+  cryptic `'utf-32-be' codec can't decode` error at completion. Every JSON
+  helper (`_request_json`, `_request_any`, and `voice_changer.retrieve`'s
+  JSON branch) now raises `VeniceUnexpectedContentTypeError` with
+  `status_code`, `content_type` and a readable `error_body` (truncated text,
+  or `"<N bytes of video/mp4>"` for binary). The raw bytes stay on
+  `exc.response.content`. Valid JSON under an unusual or missing
+  `Content-Type` still parses. For direct-bytes video use
+  `video.download(...)`, which handles both model families.
+
 ## [0.7.0] — 2026-11-09
 
 Synced to Venice API spec `20261108` (was `20260617`). Coverage: all 49 live

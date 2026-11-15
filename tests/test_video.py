@@ -269,6 +269,69 @@ def test_complete_before_ready_raises_conflict(mock_api, sync_client):
         sync_client.video.complete(queue_id="q1")
 
 
+# ---- JSON retrieve hit by a direct-bytes MP4 (GH #10) --------------------
+
+# Direct-bytes models answer /video/retrieve with the finished MP4 once a job
+# completes. The leading 00 00 00 18 sniffs as UTF-32 in response.json(), so this
+# used to leak a bare UnicodeDecodeError.
+_MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
+
+
+@pytest.mark.parametrize("content_type", ["video/mp4", "application/json"])
+async def test_retrieve_raises_typed_error_on_mp4_body(mock_api, async_client, content_type):
+    mock_api.post("/video/retrieve").respond(
+        200, content=_MP4, headers={"content-type": content_type}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await async_client.video.retrieve(model="v1", queue_id="q-123")
+    assert info.value.content_type == content_type
+    assert info.value.response.content == _MP4
+    assert "video.download" in str(info.value)
+
+
+def test_sync_retrieve_raises_typed_error_on_mp4_body(mock_api, sync_client):
+    mock_api.post("/video/retrieve").respond(
+        200, content=_MP4, headers={"content-type": "video/mp4"}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        sync_client.video.retrieve(model="v1", queue_id="q-123")
+    assert info.value.response.content == _MP4
+
+
+def _processing_then_mp4():
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if len(calls) < 2:
+            body = {"status": "PROCESSING", "average_execution_time": 1, "execution_duration": 1}
+            return httpx.Response(200, json=body)
+        return httpx.Response(200, content=_MP4, headers={"content-type": "video/mp4"})
+
+    return handler, calls
+
+
+async def test_wait_raises_typed_error_when_direct_bytes_job_completes(async_client, mock_api):
+    handler, calls = _processing_then_mp4()
+    mock_api.post("/video/retrieve").mock(side_effect=handler)
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await async_client.video.wait_for_completion(
+            model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01
+        )
+    assert len(calls) == 2  # stops at completion; doesn't keep polling or hang
+    assert info.value.response.content == _MP4
+
+
+def test_sync_wait_raises_typed_error_when_direct_bytes_job_completes(sync_client, mock_api):
+    handler, calls = _processing_then_mp4()
+    mock_api.post("/video/retrieve").mock(side_effect=handler)
+    with pytest.raises(VeniceUnexpectedContentTypeError):
+        sync_client.video.wait_for_completion(
+            model="v1", queue_id="q-123", timeout_s=5.0, poll_interval_s=0.01
+        )
+    assert len(calls) == 2
+
+
 # ---- wait_for_completion --------------------------------------------------
 
 

@@ -236,22 +236,34 @@ class VeniceServerError(VeniceAPIError):
 
 
 class VeniceUnexpectedContentTypeError(VeniceAPIError):
-    """A binary request got a 2xx response whose body is JSON, not media bytes.
+    """A 2xx response body doesn't match what the request expected.
 
-    Raised by the binary helpers (e.g.
-    :meth:`~veniceresch.resources.video.AsyncVideoResource.retrieve_binary`)
-    when Venice answers a ``Accept: <media>`` request with
-    ``Content-Type: application/json``. Venice's VPS-backed video models do
-    exactly this on ``/video/retrieve``: they return the JSON status object
-    (carrying ``download_url``) even though MP4 bytes were requested. Returning
-    that JSON verbatim as ``bytes`` would silently corrupt the caller's output
-    (an 81-byte "video"), so the SDK raises this instead.
+    Raised in both directions:
 
-    The parsed JSON body is on :attr:`error_body`; the offending value is on
-    :attr:`content_type`. For video, fetch the real media from the body's
-    ``download_url`` — or just call
-    :meth:`~veniceresch.resources.video.AsyncVideoResource.download`, which
-    handles both VPS-backed and direct-bytes models.
+    * **JSON request, non-JSON body.** Any JSON-returning method (e.g.
+      :meth:`~veniceresch.resources.video.AsyncVideoResource.retrieve`) raises
+      this when the body can't be decoded as JSON — binary media, an HTML CDN
+      page, or an empty body. Venice's direct-bytes video models do this on
+      ``/video/retrieve`` once a job completes: they return the finished MP4
+      instead of a JSON status, so ``video.wait_for_completion`` raises this at
+      completion for them; use :meth:`~veniceresch.resources.video.AsyncVideoResource.download`.
+      :attr:`error_body` is the (truncated) text for textual bodies or a short
+      descriptor like ``"<1234567 bytes of video/mp4>"`` for binary ones; the
+      raw bytes are always on ``exc.response.content``.
+
+    * **Binary request, JSON/text body.** Raised by the binary helpers (e.g.
+      :meth:`~veniceresch.resources.video.AsyncVideoResource.retrieve_binary`)
+      when Venice answers an ``Accept: <media>`` request with JSON or text.
+      Venice's VPS-backed video models do exactly this on ``/video/retrieve``:
+      they return the JSON status object even though MP4 bytes were requested.
+      Returning that verbatim as ``bytes`` would silently corrupt the caller's
+      output (an 81-byte "video"), so the SDK raises this instead. A JSON body
+      is parsed onto :attr:`error_body`; a textual one lands there as text.
+
+    The offending media type is on :attr:`content_type` (``None`` if the
+    response had none). For video,
+    :meth:`~veniceresch.resources.video.AsyncVideoResource.download` handles
+    both VPS-backed and direct-bytes models.
     """
 
     content_type: str | None

@@ -8,7 +8,12 @@ import json
 import httpx
 import pytest
 
-from veniceresch import VeniceAudioFailedError, VeniceAudioTimeoutError, VeniceServerError
+from veniceresch import (
+    VeniceAudioFailedError,
+    VeniceAudioTimeoutError,
+    VeniceServerError,
+    VeniceUnexpectedContentTypeError,
+)
 
 
 async def test_create_speech_returns_bytes(mock_api, async_client):
@@ -341,6 +346,17 @@ async def test_voice_changer_retrieve_processing_json(mock_api, async_client):
     assert result.status == "PROCESSING"
     assert result.audio is None
     assert result.average_execution_time == 9000
+
+
+async def test_voice_changer_retrieve_raises_typed_error_on_bad_json(mock_api, async_client):
+    # Labeled JSON but not decodable → typed error, not a bare JSONDecodeError (GH #10).
+    mock_api.post("/audio/voice-changer/retrieve").respond(
+        200, content=b"{not json", headers={"Content-Type": "application/json"}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await async_client.audio.voice_changer.retrieve(model="vc-1", queue_id="q1")
+    assert info.value.error_body == "{not json"
+    assert "/audio/voice-changer/retrieve" in str(info.value)
 
 
 def test_voice_changer_retrieve_completed_bytes(mock_api, sync_client):
