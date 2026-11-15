@@ -39,6 +39,7 @@ dev = [
     "pytest-cov>=5.0",
     "respx>=0.21",
     "datamodel-code-generator>=0.25",
+    "pyyaml>=6",  # tests/test_spec_coverage.py, scripts/spec_drift.py
     "build>=1.2",
     "twine>=5.0",
 ]

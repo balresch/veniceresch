@@ -965,7 +965,9 @@ strengths (spec-generated, thin, wire-correct). Ordered by value / cost.
 
 ---
 
-## 20. Spec-drift watch  — TODO
+## 20. Spec-drift watch  — DONE
+
+**Done (2026-11-15).** `scripts/spec_drift.py` (PyYAML + stdlib) diffs upstream vs vendored: spec version, added/removed operations, structural vs doc-only changes for operations and component schemas; exit 0/1/2. `.github/workflows/spec-drift.yml` runs it Mondays 06:30 UTC (and on dispatch) and opens one `spec-drift` issue, or edits it + comments only when the summary changed. First local run already found upstream `20261113.174621` vs vendored `20261108.095455` (7 operations and 9 schemas changed structurally, +`X402SignInError`).
 
 **Priority: high, small. Strength: spec-generated.**
 
@@ -985,7 +987,9 @@ summary within a week; no change produces nothing.
 
 ---
 
-## 21. Spec-coverage guard test  — TODO
+## 21. Spec-coverage guard test  — DONE
+
+**Done (2026-11-15).** `tests/test_spec_coverage.py`: `OPERATIONS` maps all 52 wrapped spec operations to a method + minimal kwargs; each is executed under respx on the async and the sync client and must hit exactly that method + path (path params formatted in). `EXCLUDED` = `/systemone`; `RETIRED` = `/billing/usage`, `/video/transcriptions` (must raise `VeniceGoneError` without a request). A set test fails on unmapped or stale operations. Mutation-checked: a wrong path in `video.quote` and a dropped mapping both fail. `pyyaml` added to the dev extras explicitly.
 
 **Priority: high, small. Strength: spec-generated.**
 

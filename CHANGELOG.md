@@ -3,6 +3,18 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Development
+
+- A weekly workflow (`spec-drift.yml`, script `scripts/spec_drift.py`) compares
+  Venice's upstream OpenAPI spec with the vendored copy and opens a
+  `spec-drift` issue when they differ.
+- `tests/test_spec_coverage.py` ties every operation in the vendored spec to the
+  client method that calls it, executing each one (async and sync) against a
+  mock and checking the method and path, so a spec change can't silently leave
+  an operation unwrapped.
+
 ## [0.9.0] — 2026-11-15
 
 `wait_for_completion()` now succeeds for every video and audio model family.
