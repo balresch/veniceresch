@@ -57,20 +57,24 @@ Generated response types used directly by resources (`BillingBalanceResponse`, `
 
 ## Commands
 
-- Regenerate types: `bash scripts/regen_types.sh` (fetches latest swagger) or `--offline` (uses pinned `vendor/venice-swagger.yaml`). `--base-class veniceresch._base_model.VeniceBaseModel` is already wired in.
-- Lint/format: `ruff check .` / `ruff format .`
-- Type check: `mypy src/veniceresch` (strict, excludes `_generated.py`)
-- Unit tests (offline, respx-mocked): `pytest` — integration tests are excluded by default via `addopts --ignore=tests/integration`.
-- Integration smoke (hits real API): `VENICE_API_KEY=... pytest tests/integration -m integration`. Free/token-cheap checks run by default; tests billed per job (voice-changer round trip, min. 1 minute) also need `VENICE_INTEGRATION_PAID=1`; admin-only routes (`/billing/*` — inference keys get 401 "Admin API key required") use a separate optional `VENICE_ADMIN_API_KEY` and skip without it (the `paid` input on the manual `integration.yml` dispatch; the weekly schedule never sets it). New endpoints should get at least a free-tier live check here — the mocked suite can't catch wire drift.
-- Single test: `pytest tests/test_chat.py::test_name`
-- Install in editable mode: `pip install -e ".[dev]"` — and check it actually is: a stale non-editable copy in site-packages silently shadows `src/` and makes pytest test the old release (`python -c "import veniceresch; print(veniceresch.__file__)"` must point into `src/`).
-- Build dists locally: `python -m build` → `python -m twine check dist/*` (mirrors what CI does).
+**All dev work happens in the project venv `.venv/` — never in the system Python.** On this host the system interpreter (`/usr/bin/python3.13`, `/usr/local/lib/python3.13/dist-packages`) is shared with downstream services: lewdresch's production service imports `veniceresch` from there, running sandboxed (`ProtectHome=tmpfs`) so it can't see `/root/veniceresch`. An editable install (`pip install -e .`) into the system Python therefore crash-loops that service on its next restart, and a non-editable one silently changes what prod runs. This happened twice (2026-11-09, 2026-11-15; GH #18). So: **never run `pip install` (editable or not) with the system interpreter**, and don't use bare `python` / `pip` / `pytest` / `mypy` / `ruff` — use the `.venv/bin/` ones (shell state doesn't persist between agent Bash calls, so `source .venv/bin/activate` in one call doesn't carry to the next).
+
+- One-time setup: `python3.13 -m venv .venv && .venv/bin/pip install -e ".[dev]"` (`.venv/` is gitignored). Check it: `.venv/bin/python -c "import veniceresch; print(veniceresch.__file__)"` must point into `src/` (a stale non-editable copy in the venv would shadow `src/` and make pytest test an old release).
+- Regenerate types: `PATH="$PWD/.venv/bin:$PATH" bash scripts/regen_types.sh` (fetches latest swagger) or `--offline` (uses pinned `vendor/venice-swagger.yaml`). The script calls `datamodel-codegen` / `python3` from `PATH`, hence the prefix. `--base-class veniceresch._base_model.VeniceBaseModel` is already wired in.
+- Lint/format: `.venv/bin/ruff check .` / `.venv/bin/ruff format .`
+- Type check: `.venv/bin/mypy src/veniceresch` (strict, excludes `_generated.py`)
+- Unit tests (offline, respx-mocked): `.venv/bin/pytest` — integration tests are excluded by default via `addopts --ignore=tests/integration`. `tests/conftest.py` refuses to run when the system interpreter on this host is importing `veniceresch` from `src/` (that's the editable-system-install footgun above).
+- Integration smoke (hits real API): `VENICE_API_KEY=... .venv/bin/pytest tests/integration -m integration`. Free/token-cheap checks run by default; tests billed per job (voice-changer round trip, min. 1 minute; one image edit) also need `VENICE_INTEGRATION_PAID=1`; admin-only routes (`/billing/*` — inference keys get 401 "Admin API key required") use a separate optional `VENICE_ADMIN_API_KEY` and skip without it (the `paid` input on the manual `integration.yml` dispatch; the weekly schedule never sets it). New endpoints should get at least a free-tier live check here — the mocked suite can't catch wire drift.
+- Single test: `.venv/bin/pytest tests/test_chat.py::test_name`
+- Build dists locally: `.venv/bin/python -m build` → `.venv/bin/python -m twine check dist/*` (mirrors what CI does; `build`/`twine` aren't in the dev extras, so `.venv/bin/pip install build twine` once).
 
 ## Releasing
 
 Published to **public PyPI** as `veniceresch` via Trusted Publishing (OIDC) — no API token is stored in the repo. The `.github/workflows/release.yml` job fires on any `v[0-9]+.[0-9]+.[0-9]+` tag: it asserts the tag matches `project.version` in `pyproject.toml`, runs `python -m build` + `twine check`, then publishes through `pypa/gh-action-pypi-publish` from the `pypi` GitHub environment.
 
 To cut a release: bump `version` in `pyproject.toml` (the single source of truth — `src/veniceresch/_version.py` reads it back from package metadata via `importlib.metadata`, so there is nothing else to hand-bump), update `CHANGELOG.md`, commit, then `git tag vX.Y.Z && git push --tags`. Breaking changes get a **major** bump so downstreams pinning `veniceresch>=0.5,<1.0` stay safe. One-time setup (account-side, can't be done from the repo): create the PyPI project / pending publisher pointing at owner `balresch`, repo `veniceresch`, workflow `release.yml`, environment `pypi`.
+
+**How downstreams on this host pick up a release** (lewdresch imports from the system Python): from PyPI once the tag's `release.yml` run has published — `python3.13 -m pip install --no-cache-dir --no-deps --upgrade veniceresch==X.Y.Z` (`--no-cache-dir` because pip's index view can lag PyPI's JSON API by minutes right after a publish). Only if a release is needed before PyPI has it: `python3.13 -m pip install --no-deps /root/veniceresch` (a regular, non-editable build with build isolation; `--no-build-isolation` fails with hatchling). Never `-e`. Afterwards `python3.13 -m pip show veniceresch` must show **no** `Editable project location`, and lewdresch's `/root/lewdresch/scripts/restart-prod.sh --check` (read-only pre-flight; imports the app inside the service's sandbox) must pass. Updating the system copy changes what lewdresch prod runs on its next restart, so it's the user's call, not a routine dev step.
 
 ## Endpoint coverage
 
