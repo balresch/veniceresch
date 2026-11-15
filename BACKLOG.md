@@ -851,7 +851,9 @@ Optionally do the same for mypy, which can add new strict errors on minors.
 
 ---
 
-## 15. GitHub Release object for v0.7.0  — TODO
+## 15. GitHub Release object for v0.7.0  — DONE
+
+**Done (2026-11-15).** Created https://github.com/balresch/veniceresch/releases/tag/v0.7.0 from the `[0.7.0]` CHANGELOG section with `--latest=false`; 0.8.0 stays "Latest".
 
 **Priority: low, trivial.** v0.8.0 has a GitHub Release, v0.7.0 doesn't.
 
