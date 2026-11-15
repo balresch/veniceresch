@@ -3,7 +3,10 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.9.0] — 2026-11-15
+
+`wait_for_completion()` now succeeds for every video and audio model family.
+Additive: two new response fields, no renames or removals.
 
 ### Changed
 
@@ -22,6 +25,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   and fell back to `retrieve_binary()` / `download()` keeps working, but that
   branch no longer triggers for these models. The bytes fields are excluded
   from `repr()`.
+
+### Development
+
+- Develop only in a project `.venv`, never the system Python (#18). On a
+  shared host a system-wide editable install can break services that import
+  `veniceresch`; the test suite now refuses to run on a distro system
+  interpreter outside CI.
+- `ruff` and `mypy` are pinned to a minor in the `dev` extras
+  (`ruff>=0.17.5,<0.18`, `mypy>=2.4,<2.5`); bump them deliberately.
+- The live integration workflow prints the output of passing tests (`-rP`).
 
 ## [0.8.0] — 2026-11-15
 
