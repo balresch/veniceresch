@@ -157,6 +157,47 @@ def _looks_like_mp4(content: bytes) -> bool:
     return content[4:8] == b"ftyp"
 
 
+_AUDIO_MAGIC = (b"ID3", b"RIFF", b"fLaC", b"OggS")
+
+
+def _looks_like_audio(content: bytes) -> bool:
+    """True for common audio containers: ID3/MP3 frame sync, WAV, FLAC, Ogg, M4A."""
+    if content.startswith(_AUDIO_MAGIC) or _looks_like_mp4(content):
+        return True
+    # bare MPEG audio frame sync (11 set bits); exclude the UTF-16 LE BOM (FF FE)
+    return (
+        len(content) >= 2
+        and content[0] == 0xFF
+        and content[1] & 0xE0 == 0xE0
+        and content[1] != 0xFE
+    )
+
+
+def _retrieve_body(response: httpx.Response, path: str, kind: str) -> Any:
+    """Body of a job-polling ``retrieve``: finished media bytes, or decoded JSON.
+
+    Venice's queue endpoints (``/video/retrieve``, ``/audio/retrieve``) answer
+    with a JSON status while the job runs. Some models (direct-bytes video,
+    ``elevenlabs-tts-*`` audio) answer with the finished file itself once it
+    completes, whatever ``Accept`` says. A non-empty body is treated as media
+    when its content type is ``{kind}/*`` or ``application/octet-stream``, or
+    when its leading bytes are a known container signature (covers a
+    mislabeled body). Returns ``bytes`` for media; anything else goes through
+    :func:`_parse_json_body`, so non-JSON text (a CDN page) still raises
+    :class:`~veniceresch._errors.VeniceUnexpectedContentTypeError`.
+    """
+    content = response.content
+    main_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    sniff = _looks_like_mp4 if kind == "video" else _looks_like_audio
+    if content and (
+        main_type.startswith(f"{kind}/")
+        or main_type == "application/octet-stream"
+        or sniff(content)
+    ):
+        return content
+    return _parse_json_body(response, path)
+
+
 def _describe_undecodable_body(response: httpx.Response, main_type: str) -> str:
     size = len(response.content)
     if size == 0:

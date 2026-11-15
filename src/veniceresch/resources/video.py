@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, NoReturn
 
 from typing_extensions import deprecated
 
+from veniceresch._content import _retrieve_body
 from veniceresch._errors import VeniceAPIError, VeniceGoneError, VeniceUnexpectedContentTypeError
 from veniceresch.resources._polling import (
     VeniceJobFailedError,
@@ -50,6 +51,8 @@ from veniceresch.types import (
 )
 
 if TYPE_CHECKING:
+    import httpx
+
     from veniceresch._client import AsyncVeniceClient, VeniceClient
 
 
@@ -105,6 +108,17 @@ def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
+def _video_retrieve_result(response: httpx.Response) -> VideoRetrieveResponse:
+    payload = _retrieve_body(response, "/video/retrieve", "video")
+    if isinstance(payload, bytes):
+        return VideoRetrieveResponse(
+            status="COMPLETED",
+            video=payload,
+            content_type=response.headers.get("content-type"),
+        )
+    return VideoRetrieveResponse.model_validate(payload)
+
+
 def _download_url_from(exc: VeniceUnexpectedContentTypeError) -> str | None:
     """Pull a non-empty ``download_url`` out of a JSON retrieve body, if any."""
     body = exc.error_body
@@ -140,7 +154,14 @@ class AsyncVideoResource:
         queue_id: str,
         delete_media_on_completion: bool | None = None,
     ) -> VideoRetrieveResponse:
-        """Poll the queue. Returns a model with a ``status`` field."""
+        """Poll the queue once. Returns a :class:`VideoRetrieveResponse`.
+
+        ``status`` is ``"PROCESSING"`` while the job runs. Direct-bytes models
+        answer with the finished MP4 once done: the result is then
+        ``status="COMPLETED"`` with the bytes on ``.video``. VPS-backed models
+        return a JSON ``COMPLETED`` status (``.video`` is ``None``); fetch their
+        media with :meth:`download`.
+        """
         body = _drop_none(
             {
                 "model": model,
@@ -148,8 +169,10 @@ class AsyncVideoResource:
                 "delete_media_on_completion": delete_media_on_completion,
             }
         )
-        raw = await self._client._request_json("POST", "/video/retrieve", json_body=body)
-        return VideoRetrieveResponse.model_validate(raw)
+        response = await self._client._send(
+            "POST", "/video/retrieve", json_body=body, params=None, headers=None
+        )
+        return _video_retrieve_result(response)
 
     async def retrieve_binary(
         self,
@@ -280,6 +303,10 @@ class AsyncVideoResource:
         (case-insensitive ``FAILED`` / ``CANCELLED`` / ``CANCELED`` / ``ERROR``);
         success and any other unknown-but-non-PROCESSING status still return
         normally.
+
+        For models that answer the final poll with the finished file, the
+        returned result already carries it on ``.video``; otherwise
+        (``.video`` is ``None``) fetch the media with :meth:`download`.
         """
         deadline = time.monotonic() + timeout_s
         while True:
@@ -325,8 +352,10 @@ class VideoResource:
                 "delete_media_on_completion": delete_media_on_completion,
             }
         )
-        raw = self._client._request_json("POST", "/video/retrieve", json_body=body)
-        return VideoRetrieveResponse.model_validate(raw)
+        response = self._client._send(
+            "POST", "/video/retrieve", json_body=body, params=None, headers=None
+        )
+        return _video_retrieve_result(response)
 
     def retrieve_binary(
         self,

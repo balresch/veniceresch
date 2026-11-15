@@ -222,10 +222,17 @@ non-PROCESSING status (so unknown terminal statuses are tolerated). Pass
 `ERROR`); the final response is on the error's `.result`.
 
 Direct-bytes video models answer `/video/retrieve` with the finished MP4
-itself once the job completes, not a JSON status. For those,
-`retrieve()` / `wait_for_completion()` raise `VeniceUnexpectedContentTypeError`
-at completion. The bytes are on `exc.response.content`, or call
-`video.download(...)`, which handles both model families.
+itself once the job completes, not a JSON status. `retrieve()` /
+`wait_for_completion()` fold that into `status="COMPLETED"` with the bytes on
+`result.video`. VPS-backed models return a JSON `COMPLETED` status
+(`result.video` is `None`); fetch their media with `video.download(...)`,
+which handles both model families:
+
+```python
+mp4 = result.video or await client.video.download(
+    model="video-v1", queue_id=queued.queue_id, download_url=queued.download_url
+)
+```
 
 Queue / retrieve / quote / complete all return typed
 Pydantic models (`VideoQueueResponse`, `VideoRetrieveResponse`, etc.).
@@ -262,7 +269,9 @@ endpoints accept the same input forms but must buffer in full — pass an
 Queued audio generation mirrors video — `client.audio.queue(...)` →
 `AudioQueueResponse`, poll `client.audio.retrieve(...)` /
 `wait_for_completion(...)` → `AudioRetrieveResponse`, then
-`retrieve_binary(...)` for the audio bytes.
+`retrieve_binary(...)` for the audio bytes. Models that answer the final poll
+with the audio itself (e.g. `elevenlabs-tts-*`) put it on `result.audio`
+directly.
 
 **Voice cloning.** `client.audio.create_cloned_voice(...)` uploads a sample
 (multipart) and returns a `vv_<id>` handle to reuse as the `voice` argument

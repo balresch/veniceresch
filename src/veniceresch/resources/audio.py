@@ -17,7 +17,7 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
-from veniceresch._content import _parse_json_body
+from veniceresch._content import _parse_json_body, _retrieve_body
 from veniceresch._errors import VeniceAPIError
 from veniceresch.resources._polling import (
     VeniceJobFailedError,
@@ -123,6 +123,17 @@ def _header_float(response: httpx.Response, name: str) -> float | None:
         return float(value)
     except ValueError:
         return None
+
+
+def _audio_retrieve_result(response: httpx.Response) -> AudioRetrieveResponse:
+    payload = _retrieve_body(response, "/audio/retrieve", "audio")
+    if isinstance(payload, bytes):
+        return AudioRetrieveResponse(
+            status="COMPLETED",
+            audio=payload,
+            content_type=response.headers.get("content-type"),
+        )
+    return AudioRetrieveResponse.model_validate(payload)
 
 
 def _vc_retrieve_result(response: httpx.Response) -> VoiceChangerRetrieveResponse:
@@ -485,9 +496,18 @@ class AsyncAudioResource:
         return AudioQueueResponse.model_validate(raw)
 
     async def retrieve(self, *, model: str, queue_id: str, **extra: Any) -> AudioRetrieveResponse:
+        """Poll a queued audio job once. Returns an :class:`AudioRetrieveResponse`.
+
+        ``status`` is ``"PROCESSING"`` while it runs. Models that answer with
+        the finished audio itself (e.g. ``elevenlabs-tts-*``) yield
+        ``status="COMPLETED"`` with the bytes on ``.audio``; for JSON-status
+        models fetch the audio with :meth:`retrieve_binary`.
+        """
         body = _drop_none({"model": model, "queue_id": queue_id, **extra})
-        raw = await self._client._request_json("POST", "/audio/retrieve", json_body=body)
-        return AudioRetrieveResponse.model_validate(raw)
+        response = await self._client._send(
+            "POST", "/audio/retrieve", json_body=body, params=None, headers=None
+        )
+        return _audio_retrieve_result(response)
 
     async def retrieve_binary(
         self,
@@ -536,6 +556,10 @@ class AsyncAudioResource:
         (case-insensitive ``FAILED`` / ``CANCELLED`` / ``CANCELED`` / ``ERROR``);
         success and any other unknown-but-non-PROCESSING status still return
         normally.
+
+        For models that answer the final poll with the finished file, the
+        returned result already carries it on ``.audio``; otherwise
+        (``.audio`` is ``None``) fetch the media with :meth:`retrieve_binary`.
         """
         deadline = time.monotonic() + timeout_s
         while True:
@@ -635,8 +659,10 @@ class AudioResource:
 
     def retrieve(self, *, model: str, queue_id: str, **extra: Any) -> AudioRetrieveResponse:
         body = _drop_none({"model": model, "queue_id": queue_id, **extra})
-        raw = self._client._request_json("POST", "/audio/retrieve", json_body=body)
-        return AudioRetrieveResponse.model_validate(raw)
+        response = self._client._send(
+            "POST", "/audio/retrieve", json_body=body, params=None, headers=None
+        )
+        return _audio_retrieve_result(response)
 
     def retrieve_binary(
         self,

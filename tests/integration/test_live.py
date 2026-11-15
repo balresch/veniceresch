@@ -336,3 +336,37 @@ async def test_image_edit_header_metadata(paid: str) -> None:
     print(f"edit metadata: {meta!r}")  # visible with -rA / on failure: records the live header set
     assert meta.content_type and meta.content_type.startswith("image/")
     assert meta.is_blurred is not None, f"no x-venice-is-blurred header; got {meta.headers}"
+
+
+async def test_audio_queue_direct_bytes_completion(paid: str) -> None:
+    """queue → wait_for_completion on a model whose final poll returns the
+    audio itself (``elevenlabs-tts-*``, per lewdresch's production logs).
+
+    Checks BACKLOG #17: wait_for_completion returns COMPLETED with the bytes on
+    ``.audio`` instead of failing on the non-JSON body. If Venice instead
+    answers with a JSON COMPLETED status, the audio must come from
+    retrieve_binary. Billed: one very short TTS job.
+    """
+    async with AsyncVeniceClient(api_key=paid) as client:
+        models = await client.models.list(type="all")
+        ids = sorted(
+            m["id"] for m in models.data if str(m.get("id", "")).startswith("elevenlabs-tts")
+        )
+        if not ids:
+            pytest.skip("No elevenlabs-tts-* model listed on this account.")
+        model = ids[0]
+        job = await client.audio.queue(model=model, prompt="Testing.")
+        assert job.queue_id
+        result = await client.audio.wait_for_completion(
+            model=model, queue_id=job.queue_id, timeout_s=180, poll_interval_s=2
+        )
+        print(
+            f"{model}: status={result.status} content_type={result.content_type} "
+            f"audio_bytes={len(result.audio or b'')}"
+        )
+        assert result.status == "COMPLETED"
+        if result.audio is None:  # JSON-status model after all: binary fetch must work
+            audio = await client.audio.retrieve_binary(model=model, queue_id=job.queue_id)
+            assert audio
+        else:
+            assert len(result.audio) > 100

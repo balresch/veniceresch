@@ -398,26 +398,34 @@ class VideoQueueResponse(VeniceBaseModel):
 
 
 class VideoRetrieveResponse(VeniceBaseModel):
-    """Response from ``POST /video/retrieve`` (JSON form).
+    """Result of polling ``POST /video/retrieve``.
 
-    For the binary form (MP4 bytes), use
-    :meth:`~veniceresch.resources.video.AsyncVideoResource.download` (which
-    works for both VPS-backed and direct-bytes models). ``status`` is
-    ``"PROCESSING"`` until the job finishes; ``/video/retrieve`` is for status
-    polling only.
+    Two shapes, folded into this one model so ``retrieve()`` and
+    :meth:`~veniceresch.resources.video.AsyncVideoResource.wait_for_completion`
+    work for every model family:
+
+    - JSON status (all models while running; VPS-backed models also when done):
+      ``status`` is ``"PROCESSING"`` until the job finishes, and ``video`` is
+      ``None``.
+    - Finished media (direct-bytes models, once complete): Venice sends the MP4
+      itself instead of a status. ``status`` is ``"COMPLETED"`` (synthesized by
+      the SDK), ``video`` holds the bytes and ``content_type`` the response
+      ``Content-Type``. The whole file is held in memory, as with ``download()``.
 
     ``download_url`` is **not** populated here for VPS-backed models — their
     completed retrieve body carries only status fields. For those models the
     media URL is on the ``video.queue()`` submit response
-    (:attr:`VideoQueueResponse.download_url`). The field is declared (and
-    tolerated) here only for direct-bytes models that happen to echo it back;
-    any other completion fields land on ``.model_extra``.
+    (:attr:`VideoQueueResponse.download_url`), and
+    :meth:`~veniceresch.resources.video.AsyncVideoResource.download` fetches it.
+    Any other completion fields land on ``.model_extra``.
     """
 
     status: str | None = None
     average_execution_time: float | None = None
     execution_duration: float | None = None
     download_url: str | None = None
+    video: bytes | None = Field(default=None, repr=False)
+    content_type: str | None = None
 
 
 class VideoQuoteResponse(VeniceBaseModel):
@@ -457,16 +465,21 @@ class AudioQueueResponse(VeniceBaseModel):
 
 
 class AudioRetrieveResponse(VeniceBaseModel):
-    """Response from ``POST /audio/retrieve`` (JSON form).
+    """Result of polling ``POST /audio/retrieve``.
 
-    For the binary form (audio/mpeg or audio/wav or audio/flac bytes),
-    use
+    A JSON status while the job runs (``audio`` is ``None``). Some queued
+    models (e.g. ``elevenlabs-tts-*``) answer with the finished audio itself
+    once done: then ``status`` is ``"COMPLETED"`` (synthesized by the SDK),
+    ``audio`` holds the bytes and ``content_type`` the response
+    ``Content-Type``. To fetch the audio of a JSON-status model, use
     :meth:`~veniceresch.resources.audio.AsyncAudioResource.retrieve_binary`.
     """
 
     status: str | None = None
     average_execution_time: float | None = None
     execution_duration: float | None = None
+    audio: bytes | None = Field(default=None, repr=False)
+    content_type: str | None = None
 
 
 class AudioQuoteResponse(VeniceBaseModel):
@@ -543,8 +556,7 @@ class VoiceChangerRetrieveResponse(AudioRetrieveResponse):
       ``audio_duration``, ``inference_time``, ``model_id`` and ``model_name``.
     """
 
-    audio: bytes | None = None
-    content_type: str | None = None
+    # audio / content_type are inherited from AudioRetrieveResponse.
     audio_format: str | None = None
     audio_duration: float | None = None
     inference_time: float | None = None
