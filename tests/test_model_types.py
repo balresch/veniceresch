@@ -67,6 +67,7 @@ def _fields(model: type) -> set[str]:
                 "audio_configurable",
                 "durations",
                 "model_type",
+                "per_reference_audio",
                 "prompt_character_limit",
                 "resolutions",
                 "topaz",

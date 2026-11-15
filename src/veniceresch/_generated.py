@@ -164,7 +164,10 @@ class Accept(VeniceBaseModel):
     scheme: Annotated[Scheme, Field(description="x402 payment scheme.", examples=["exact"])]
     network: Annotated[
         str,
-        Field(description="Payment network for this requirement.", examples=["solana"]),
+        Field(
+            description="Payment network for this requirement in CAIP-2 form (e.g. `eip155:8453` for Base, `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` for Solana mainnet).",
+            examples=["solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"],
+        ),
     ]
     asset: Annotated[
         str,
@@ -371,7 +374,10 @@ class Info(VeniceBaseModel):
     version: Annotated[str, Field(description="SIWX version.", examples=["1"])]
     nonce: Annotated[
         str,
-        Field(description="Unique nonce for replay protection.", examples=["{{nonce}}"]),
+        Field(
+            description="Server-generated nonce for replay protection: 32 hex characters.",
+            examples=["a1b2c3d4e5f67890a1b2c3d4e5f67890"],
+        ),
     ]
     issuedAt: Annotated[
         str,
@@ -398,7 +404,6 @@ class Info(VeniceBaseModel):
 
 class Type1(Enum):
     eip191 = "eip191"
-    eip1271 = "eip1271"
     ed25519 = "ed25519"
 
 
@@ -412,7 +417,10 @@ class SupportedChain(VeniceBaseModel):
     ]
     type: Annotated[
         Type1,
-        Field(description="Signature type accepted for this chain.", examples=["ed25519"]),
+        Field(
+            description="Signature algorithm: `eip191` for EVM wallets (EOAs and smart contract wallets), `ed25519` for Solana.",
+            examples=["ed25519"],
+        ),
     ]
 
 
@@ -421,6 +429,13 @@ class SiwxChallenge(VeniceBaseModel):
     supportedChains: Annotated[
         list[SupportedChain],
         Field(description="Supported SIWX chains and signature types."),
+    ]
+    schema_: Annotated[
+        dict[str, Any],
+        Field(
+            alias="schema",
+            description="JSON Schema of the proof the client sends in the `SIGN-IN-WITH-X` header.",
+        ),
     ]
 
 
@@ -3166,19 +3181,6 @@ class UpscaleImageRequest(VeniceBaseModel):
     ] = 2
 
 
-class AspectRatio(Enum):
-    auto = "auto"
-    field_61 = 61
-    field_182 = 182
-    field_969 = 969
-    field_1269 = 1269
-    field_556 = 556
-    field_123 = 123
-    field_184 = 184
-    field_243 = 243
-    field_245 = 245
-
-
 class EditImageRequest(VeniceBaseModel):
     anon_user_id: Annotated[
         str | None,
@@ -3191,10 +3193,12 @@ class EditImageRequest(VeniceBaseModel):
         ),
     ] = None
     aspect_ratio: Annotated[
-        AspectRatio | None,
+        str | None,
         Field(
             description="The aspect ratio for the output image. Use 'auto' or omit this parameter to infer the closest supported aspect ratio from the input image when explicit sizing is required by the model. Supported values vary by model - check GET /api/v1/models for model-specific options.",
             examples=[969],
+            max_length=32,
+            pattern="^(?:auto|\\d+(?:\\.\\d+)?:\\d+(?:\\.\\d+)?)$",
         ),
     ] = None
     disable_prompt_optimization_thinking: Annotated[
@@ -3288,10 +3292,12 @@ class MultiEditImageRequest(VeniceBaseModel):
         ),
     ] = None
     aspect_ratio: Annotated[
-        AspectRatio | None,
+        str | None,
         Field(
             description="The aspect ratio for the output image. Use 'auto' or omit this parameter to infer the closest supported aspect ratio from the first input image when explicit sizing is required by the model.",
             examples=[969],
+            max_length=32,
+            pattern="^(?:auto|\\d+(?:\\.\\d+)?:\\d+(?:\\.\\d+)?)$",
         ),
     ] = None
     modelId: Annotated[
@@ -3316,7 +3322,8 @@ class MultiEditImageRequest(VeniceBaseModel):
     images: Annotated[
         list[AnyUrl | str],
         Field(
-            description="Images used for multi-editing (minimum 1). The maximum is model-specific — see `capabilities.maxInputImages` from GET /api/v1/models. The first image is treated as the base image, and the remaining images are used as edit layers/masks. Each image can be a base64-encoded string or a URL starting with http:// or https://. Image dimensions must be at least 65536 pixels and must not exceed 33177600 pixels. File size must be less than 25MB."
+            description="Images used for multi-editing (minimum 1). The maximum is model-specific — see `capabilities.maxInputImages` from GET /api/v1/models. The first image is treated as the base image, and the remaining images are used as edit layers/masks. Each image can be a base64-encoded string or a URL starting with http:// or https://. Image dimensions must be at least 65536 pixels and must not exceed 33177600 pixels. File size must be less than 25MB.",
+            min_length=1,
         ),
     ]
     quality: Annotated[
@@ -3377,10 +3384,12 @@ class MultiEditImageMultipartRequest(VeniceBaseModel):
         ),
     ] = None
     aspect_ratio: Annotated[
-        AspectRatio | None,
+        str | None,
         Field(
             description="The aspect ratio for the output image. Use 'auto' or omit this parameter to infer the closest supported aspect ratio from the first input image when explicit sizing is required by the model.",
             examples=[969],
+            max_length=32,
+            pattern="^(?:auto|\\d+(?:\\.\\d+)?:\\d+(?:\\.\\d+)?)$",
         ),
     ] = None
     modelId: Annotated[
@@ -3667,7 +3676,31 @@ class Images1(VeniceBaseModel):
     ]
 
 
+class Format6(Enum):
+    png = "png"
+    jpg = "jpg"
+    jpeg = "jpeg"
+
+
 class Type96(Enum):
+    image = "image"
+
+
+class Assets(VeniceBaseModel):
+    data_base64: Annotated[
+        str, Field(description="Base64 image bytes with no data: prefix.", min_length=1)
+    ]
+    format: Annotated[
+        Format6,
+        Field(description="Image format, lowercase. jpeg is another name for jpg."),
+    ]
+    type: Annotated[
+        Type96 | None,
+        Field(description="Asset kind. Optional. If set, it must be image."),
+    ] = None
+
+
+class Type97(Enum):
     noul = "noul"
 
 
@@ -3699,7 +3732,7 @@ class Criteria(VeniceBaseModel):
 
 
 class Questions(VeniceBaseModel):
-    type: Type96
+    type: Type97
     instructions: Annotated[
         Instructions | dict[str, Any] | Instructions1,
         Field(
@@ -3710,7 +3743,7 @@ class Questions(VeniceBaseModel):
     criteria: Criteria | None = None
 
 
-class Type97(Enum):
+class Type98(Enum):
     choice = "choice"
 
 
@@ -3737,7 +3770,7 @@ class Instructions3(RootModel[list[Any]]):
 
 
 class Questions1(VeniceBaseModel):
-    type: Type97
+    type: Type98
     instructions: Annotated[
         Instructions2 | dict[str, Any] | Instructions3,
         Field(
@@ -3759,7 +3792,7 @@ class Questions1(VeniceBaseModel):
     ]
 
 
-class Type98(Enum):
+class Type99(Enum):
     score = "score"
 
 
@@ -3786,7 +3819,7 @@ class Instructions5(RootModel[list[Any]]):
 
 
 class Questions2(VeniceBaseModel):
-    type: Type98
+    type: Type99
     instructions: Annotated[
         Instructions4 | dict[str, Any] | Instructions5,
         Field(
@@ -3827,6 +3860,12 @@ class CreateDecisionRequestSchema(VeniceBaseModel):
             min_length=1,
         ),
     ] = None
+    assets: Annotated[
+        dict[str, Assets] | None,
+        Field(
+            description="Jev images, keyed by the reference string used in state, instructions, or criteria. Rejected for every other decision model. Each value is an image asset with data_base64 and format (png, jpg, or jpeg). type must be image when set. Multipart part names are not accepted."
+        ),
+    ] = None
     questions: Annotated[
         dict[str, Questions | Questions1 | Questions2],
         Field(
@@ -3839,6 +3878,7 @@ class CreateDecisionRequestSchema(VeniceBaseModel):
                     }
                 }
             ],
+            min_length=1,
         ),
     ]
 
@@ -4098,7 +4138,7 @@ class Duration(Enum):
     Auto = "Auto"
 
 
-class AspectRatio3(Enum):
+class AspectRatio(Enum):
     field_61 = 61
     field_121 = 121
     field_123 = 123
@@ -4170,6 +4210,46 @@ class CameraTrajectoryItem(VeniceBaseModel):
     distance: Annotated[float, Field(gt=0.0)]
 
 
+class Type100(Enum):
+    subject = "subject"
+    background = "background"
+
+
+class ImageReference(VeniceBaseModel):
+    image_url: Annotated[str, Field(description="The reference image. Must be a URL or data URL.")]
+    type: Annotated[
+        Type100 | None,
+        Field(
+            description="Whether the image shows a subject or a background. Used by PixVerse C1 reference-to-video; defaults to subject."
+        ),
+    ] = None
+    ref_name: Annotated[
+        str | None,
+        Field(
+            description="The name the prompt uses for the image. Used by PixVerse C1 reference-to-video; defaults to Image1, Image2 and so on."
+        ),
+    ] = None
+    audio_url: Annotated[
+        str | None,
+        Field(
+            description="The voice of the person or character in this image, on models whose GET /models constraints.per_reference_audio is true. WAV or MP3, as a URL or data URL."
+        ),
+    ] = None
+
+
+class VideoReference(VeniceBaseModel):
+    video_url: Annotated[str, Field(description="The reference clip. Must be a URL or data URL.")]
+    ref_name: Annotated[str | None, Field(description="An optional label for the reference.")] = (
+        None
+    )
+    audio_url: Annotated[
+        str | None,
+        Field(
+            description="The voice of the person or character in this clip. WAV or MP3, as a URL or data URL."
+        ),
+    ] = None
+
+
 class Element(VeniceBaseModel):
     frontal_image_url: str | None = None
     reference_image_urls: Annotated[list[str] | None, Field(max_length=3)] = None
@@ -4220,7 +4300,7 @@ class QueueVideoRequest(VeniceBaseModel):
         ),
     ]
     aspect_ratio: Annotated[
-        AspectRatio3 | None,
+        AspectRatio | None,
         Field(
             description="The aspect ratio of the video. Available options vary by model. Some models do not support aspect_ratio. For Seedance 2.x reference-to-video edit/extend, `adaptive` or `auto` matches output aspect ratio to the source clip (requires reference_video_urls on queue, or reference_video_total_duration on quote).",
             examples=[969],
@@ -4429,6 +4509,21 @@ class QueueVideoRequest(VeniceBaseModel):
             max_length=30,
         ),
     ] = None
+    image_references: Annotated[
+        list[ImageReference] | None,
+        Field(
+            description="For models with reference image support, up to 30 reference images given as objects instead of plain URLs, so each one can have a type, a name in the prompt or its own voice. Wan 2.7 reference-to-video takes at most 5 reference images and videos combined.",
+            examples=[
+                [
+                    {
+                        "image_url": "https://example.com/character.png",
+                        "audio_url": "https://example.com/voice.mp3",
+                    }
+                ]
+            ],
+            max_length=30,
+        ),
+    ] = None
     reference_video_urls: Annotated[
         list[str] | None,
         Field(
@@ -4443,6 +4538,21 @@ class QueueVideoRequest(VeniceBaseModel):
             description='For models with reference audio support (e.g. Seedance 2.0 R2V), up to 10 reference audio URLs (`role: "reference_audio"`) used as donors for vocal timbre, narration, or sound effects. Per-clip 2–15 s, .wav or .mp3; aggregate duration ≤15 s. Must be paired with at least one reference image or reference video — audio-only Reference workflows are rejected at validation. Each must be a URL or data URL.',
             examples=[["data:audio/mpeg;base64,SUQzBAAAAAA..."]],
             max_length=10,
+        ),
+    ] = None
+    video_references: Annotated[
+        list[VideoReference] | None,
+        Field(
+            description="For models whose GET /models constraints.per_reference_audio is true (e.g. Wan 2.7 reference-to-video), up to 5 reference clips, each with an optional voice for the person or character in it. Wan 2.7 takes at most 5 reference images and videos combined.",
+            examples=[
+                [
+                    {
+                        "video_url": "https://example.com/reference-clip.mp4",
+                        "audio_url": "https://example.com/voice.mp3",
+                    }
+                ]
+            ],
+            max_length=5,
         ),
     ] = None
     reference_document_urls: Annotated[
@@ -4495,6 +4605,20 @@ class QueueVideoRequest(VeniceBaseModel):
             max_length=10,
         ),
     ] = None
+    draft: Annotated[
+        bool | None,
+        Field(
+            description="Seedance 2.5 only (models with supportsDraftMode). Generate a fast 480p draft. The response includes draft_task_id; upgrade it to 1080p within 7 days by sending draft_task_id.",
+            examples=[False],
+        ),
+    ] = None
+    draft_task_id: Annotated[
+        UUID | None,
+        Field(
+            description="Seedance 2.5 only. queue_id of your own draft to upgrade to 1080p. Duration, aspect ratio and audio follow the draft; media inputs are ignored. Cannot be combined with draft.",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+        ),
+    ] = None
 
 
 class QuoteVideoRequest(VeniceBaseModel):
@@ -4513,7 +4637,7 @@ class QuoteVideoRequest(VeniceBaseModel):
         ),
     ]
     aspect_ratio: Annotated[
-        AspectRatio3 | None,
+        AspectRatio | None,
         Field(
             description="The aspect ratio. Required for some models with megapixel-rate pricing. For Seedance 2.x reference-to-video edit/extend, `adaptive` or `auto` matches output aspect ratio to the source clip (requires reference_video_urls on queue, or reference_video_total_duration on quote).",
             examples=[969],
@@ -4568,12 +4692,30 @@ class QuoteVideoRequest(VeniceBaseModel):
             examples=["data:video/mp4;base64,AAAAFGZ0eXA..."],
         ),
     ] = None
+    image_url: Annotated[
+        str | None,
+        Field(
+            description="For image-to-video models, the reference image. When aspect_ratio is auto, the quote reads this image the same way queue billing does. Must be an http(s) URL or a data URL.",
+            examples=["data:image/png;base64,iVBORw0K..."],
+        ),
+    ] = None
     reference_video_total_duration: Annotated[
         float | None,
         Field(
             description="For R2V models (e.g. Seedance 2.0 / 2.5 R2V), the aggregate duration in seconds of all reference videos to include in the quote (max 150s; per-clip and family caps vary by model). When provided, the quote reflects the BytePlus 'input with video' rate tier and the (input+output)×pixels token formula. Required when quoting Seedance source-matched duration (`-1`/`auto`) or aspect ratio (`adaptive`/`auto`). When omitted for ordinary fixed-duration quotes, the quote returns the no-reference baseline.",
             examples=[5],
             ge=0.0,
+        ),
+    ] = None
+    draft: Annotated[
+        bool | None,
+        Field(description="Seedance 2.5 only. Quote a 480p draft.", examples=[False]),
+    ] = None
+    draft_task_id: Annotated[
+        UUID | None,
+        Field(
+            description="Seedance 2.5 only. Quote the 1080p HD upgrade of your own draft. Requires authentication.",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
         ),
     ] = None
 
@@ -4615,7 +4757,7 @@ class RetrieveVideoRequest(VeniceBaseModel):
     delete_media_on_completion: Annotated[
         bool | None,
         Field(
-            description="If true, the video media will be deleted from storage after the request is completed. If false, you can use the complete endpoint to remove the media once you have successfully downloaded the video.",
+            description="If true, the video media will be deleted from storage after the request is completed. If false, you can use the complete endpoint to remove the media once you have successfully downloaded the video. A draft created with `draft` is kept until its HD upgrade window ends.",
             examples=[False],
         ),
     ] = False
@@ -4736,6 +4878,17 @@ class QueueAudioRequest(VeniceBaseModel):
             examples=[1],
             ge=0.25,
             le=4.0,
+        ),
+    ] = None
+    reference_audio_urls: Annotated[
+        list[str] | None,
+        Field(
+            description="Optional reference audio clips. Only supported when `/models` reports `supports_reference_audios=true`; send at most `max_reference_audios` clips. Refer to them in the prompt in order as `@Audio1`, `@Audio2`, and so on. Each clip must be audio without video, at most 30 seconds and 10 MB, sent as a base64 data URL (for example `data:audio/mpeg;base64,...`). http(s) URLs are not supported. All clips together must be at most about 22 MB. Cannot be combined with a preset `voice`; omit `voice` or set it to `Describe in prompt`.",
+            examples=[
+                [
+                    "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA"
+                ]
+            ],
         ),
     ] = None
 
@@ -5164,7 +5317,6 @@ class BillingUsageHistoryRequest(VeniceBaseModel):
         Field(
             description='Exclusive upper bound on entry timestamps (ISO 8601 UTC, "Z" suffix). Must be later than startTimestamp; consecutive windows sharing a boundary walk the history without gaps or overlaps. Carried forward by the cursor.',
             examples=["2026-07-01T00:00:00Z"],
-            max_length=40,
         ),
     ] = None
     pageSize: Annotated[
@@ -5181,7 +5333,6 @@ class BillingUsageHistoryRequest(VeniceBaseModel):
         Field(
             description='Inclusive lower bound on entry timestamps (ISO 8601 UTC, "Z" suffix). First page only: a continuation resumes from the cursor position instead.',
             examples=["2026-06-01T00:00:00Z"],
-            max_length=40,
         ),
     ] = None
 
@@ -5241,7 +5392,6 @@ class Datum(VeniceBaseModel):
         Field(
             description="The timestamp the billing usage entry was created (ISO 8601)",
             examples=["2026-06-15T19:05:10.504Z"],
-            max_length=40,
         ),
     ]
     units: Annotated[float, Field(description="The number of units consumed")]
@@ -5723,6 +5873,13 @@ class Constraints2(VeniceBaseModel):
         Field(
             description="Can audio be enabled or disabled for the video generation?",
             examples=[True],
+        ),
+    ]
+    per_reference_audio: Annotated[
+        bool,
+        Field(
+            description="Can each reference carry its own voice? When true, POST /video/queue takes an `audio_url` on each `image_references` and `video_references` entry.",
+            examples=[False],
         ),
     ]
     prompt_character_limit: Annotated[
@@ -6347,7 +6504,7 @@ class ModelSpec(VeniceBaseModel):
     ] = None
     name: Annotated[
         str | None,
-        Field(description="The name of the model.", examples=["Gemini 4 Argon"]),
+        Field(description="The name of the model.", examples=["Gemini 4 Carbon"]),
     ] = None
     modelSource: Annotated[
         str | None,
@@ -6485,6 +6642,20 @@ class ModelSpec(VeniceBaseModel):
             examples=[True],
         ),
     ] = None
+    supports_reference_audios: Annotated[
+        bool | None,
+        Field(
+            description="Whether this audio-generation model accepts reference audio clips in the reference_audio_urls request parameter.",
+            examples=[True],
+        ),
+    ] = None
+    max_reference_audios: Annotated[
+        int | None,
+        Field(
+            description="Maximum number of clips accepted in reference_audio_urls. Present only when supports_reference_audios is true.",
+            examples=[3],
+        ),
+    ] = None
     voice_changer: Annotated[
         bool | None,
         Field(
@@ -6612,7 +6783,7 @@ class OwnedBy(Enum):
     venice_ai = "venice.ai"
 
 
-class Type99(Enum):
+class Type101(Enum):
     asr = "asr"
     decision = "decision"
     embedding = "embedding"
@@ -6646,11 +6817,11 @@ class ModelResponse(VeniceBaseModel):
             lt=1.0,
         ),
     ] = None
-    id: Annotated[str, Field(description="Model ID", examples=["gemini-4-argon"])]
+    id: Annotated[str, Field(description="Model ID", examples=["gemini-4-carbon"])]
     model_spec: ModelSpec
     object: Annotated[Object1, Field(description="Object type", examples=["model"])]
     owned_by: Annotated[OwnedBy, Field(description="Who runs the model", examples=["venice.ai"])]
-    type: Annotated[Type99, Field(description="Model type", examples=["text"])]
+    type: Annotated[Type101, Field(description="Model type", examples=["text"])]
 
 
 class ModelTraitSchema(RootModel[dict[str, str]]):
@@ -6661,7 +6832,31 @@ class ModelCompatibilitySchema(RootModel[dict[str, str]]):
     root: dict[str, str]
 
 
-class Format6(Enum):
+class X402SignInError(VeniceBaseModel):
+    error: Annotated[
+        str,
+        Field(
+            description="Human-readable reason the Sign-in-with-X proof was rejected.",
+            examples=["This nonce has already been used"],
+        ),
+    ]
+    code: Annotated[
+        str,
+        Field(
+            description="Machine-readable `X402_SIGN_IN_*` code naming the failed check.",
+            examples=["X402_SIGN_IN_NONCE_REUSED"],
+        ),
+    ]
+    invalidReason: Annotated[
+        str | None,
+        Field(
+            description="The sign-in-with-x spec code (`invalid_siwx_*`) for the failed check, when the spec names it.",
+            examples=["invalid_siwx_nonce"],
+        ),
+    ] = None
+
+
+class Format7(Enum):
     markdown = "markdown"
 
 
@@ -6671,7 +6866,7 @@ class WebScrapeResponse(VeniceBaseModel):
         Field(description="The URL that was scraped", examples=["https://example.com"]),
     ]
     content: Annotated[str, Field(description="The scraped content in markdown format")]
-    format: Annotated[Format6, Field(description="The format of the scraped content")]
+    format: Annotated[Format7, Field(description="The format of the scraped content")]
 
 
 class Result(VeniceBaseModel):

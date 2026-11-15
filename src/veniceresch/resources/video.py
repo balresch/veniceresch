@@ -108,6 +108,15 @@ def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
+def _draft_fields(draft: bool | None, draft_task_id: str | None) -> dict[str, Any]:
+    if draft and draft_task_id is not None:
+        raise ValueError(
+            "draft=True and draft_task_id can't be combined: draft_task_id upgrades an "
+            "existing draft to HD (Venice rejects both)."
+        )
+    return {"draft": draft, "draft_task_id": draft_task_id}
+
+
 def _video_retrieve_result(response: httpx.Response) -> VideoRetrieveResponse:
     payload = _retrieve_body(response, "/video/retrieve", "video")
     if isinstance(payload, bytes):
@@ -141,9 +150,29 @@ class AsyncVideoResource:
         model: str,
         prompt: str | None = None,
         duration: str | None = None,
+        draft: bool | None = None,
+        draft_task_id: str | None = None,
         **extra: Any,
     ) -> VideoQueueResponse:
-        body = _drop_none({"model": model, "prompt": prompt, "duration": duration, **extra})
+        """Queue a video job. Returns a :class:`VideoQueueResponse` with ``queue_id``.
+
+        Fields not named here (``aspect_ratio``, ``resolution``, ``image_url``,
+        ``image_references``, ``video_references``, …) go through ``**extra``.
+
+        Draft mode (models with ``supportsDraftMode``, e.g. Seedance 2.5):
+        ``draft=True`` renders a fast 480p draft; the response carries
+        ``draft_task_id``. Queue again with ``draft_task_id=...`` (and no
+        ``draft``) to upgrade it to HD before ``draft_expires_at``.
+        """
+        body = _drop_none(
+            {
+                "model": model,
+                "prompt": prompt,
+                "duration": duration,
+                **_draft_fields(draft, draft_task_id),
+                **extra,
+            }
+        )
         raw = await self._client._request_json("POST", "/video/queue", json_body=body)
         return VideoQueueResponse.model_validate(raw)
 
@@ -248,9 +277,15 @@ class AsyncVideoResource:
         *,
         model: str,
         duration: str | None = None,
+        draft: bool | None = None,
+        draft_task_id: str | None = None,
         **extra: Any,
     ) -> VideoQuoteResponse:
-        body = _drop_none({"model": model, "duration": duration, **extra})
+        """Price a video job. ``draft`` / ``draft_task_id`` quote a draft or its
+        HD upgrade (see :meth:`queue`); other fields go through ``**extra``."""
+        body = _drop_none(
+            {"model": model, "duration": duration, **_draft_fields(draft, draft_task_id), **extra}
+        )
         raw = await self._client._request_json("POST", "/video/quote", json_body=body)
         return VideoQuoteResponse.model_validate(raw)
 
@@ -332,9 +367,20 @@ class VideoResource:
         model: str,
         prompt: str | None = None,
         duration: str | None = None,
+        draft: bool | None = None,
+        draft_task_id: str | None = None,
         **extra: Any,
     ) -> VideoQueueResponse:
-        body = _drop_none({"model": model, "prompt": prompt, "duration": duration, **extra})
+        """Sync mirror of :meth:`AsyncVideoResource.queue`."""
+        body = _drop_none(
+            {
+                "model": model,
+                "prompt": prompt,
+                "duration": duration,
+                **_draft_fields(draft, draft_task_id),
+                **extra,
+            }
+        )
         raw = self._client._request_json("POST", "/video/queue", json_body=body)
         return VideoQueueResponse.model_validate(raw)
 
@@ -414,9 +460,14 @@ class VideoResource:
         *,
         model: str,
         duration: str | None = None,
+        draft: bool | None = None,
+        draft_task_id: str | None = None,
         **extra: Any,
     ) -> VideoQuoteResponse:
-        body = _drop_none({"model": model, "duration": duration, **extra})
+        """Sync mirror of :meth:`AsyncVideoResource.quote`."""
+        body = _drop_none(
+            {"model": model, "duration": duration, **_draft_fields(draft, draft_task_id), **extra}
+        )
         raw = self._client._request_json("POST", "/video/quote", json_body=body)
         return VideoQuoteResponse.model_validate(raw)
 

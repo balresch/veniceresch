@@ -504,3 +504,75 @@ def test_sync_video_queue(mock_api, sync_client):
     mock_api.post("/video/queue").respond(200, json={"model": "v1", "queue_id": "q"})
     result = sync_client.video.queue(model="v1", prompt="p", duration="5s")
     assert result.queue_id == "q"
+
+
+# ---- draft mode (spec 20261113) -------------------------------------------
+
+
+async def test_queue_forwards_draft_and_parses_draft_response(mock_api, async_client):
+    route = mock_api.post("/video/queue").respond(
+        200,
+        json={
+            "model": "seedance-2-5",
+            "queue_id": "q-draft",
+            "draft_task_id": "q-draft",
+            "draft_expires_at": "2026-11-22T00:00:00Z",
+            "can_upgrade_to_hd": True,
+        },
+    )
+    result = await async_client.video.queue(model="seedance-2-5", prompt="a cat", draft=True)
+    assert json.loads(route.calls.last.request.content) == {
+        "model": "seedance-2-5",
+        "prompt": "a cat",
+        "draft": True,
+    }
+    assert result.draft_task_id == "q-draft"
+    assert result.draft_expires_at == "2026-11-22T00:00:00Z"
+    assert result.can_upgrade_to_hd is True
+
+
+def test_sync_queue_upgrade_sends_draft_task_id(mock_api, sync_client):
+    route = mock_api.post("/video/queue").respond(200, json={"model": "m", "queue_id": "q-hd"})
+    sync_client.video.queue(model="m", draft_task_id="q-draft")
+    assert json.loads(route.calls.last.request.content) == {
+        "model": "m",
+        "draft_task_id": "q-draft",
+    }
+
+
+@pytest.mark.parametrize("method", ["queue", "quote"])
+async def test_draft_and_draft_task_id_are_exclusive(mock_api, async_client, sync_client, method):
+    route = mock_api.route().respond(200, json={})
+    with pytest.raises(ValueError, match="can't be combined"):
+        await getattr(async_client.video, method)(model="m", draft=True, draft_task_id="q1")
+    with pytest.raises(ValueError, match="can't be combined"):
+        getattr(sync_client.video, method)(model="m", draft=True, draft_task_id="q1")
+    assert not route.called
+
+
+async def test_quote_forwards_draft_and_extra(mock_api, async_client):
+    route = mock_api.post("/video/quote").respond(200, json={"quote": 0.12})
+    await async_client.video.quote(model="m", draft=True, image_url="https://x/i.png")
+    assert json.loads(route.calls.last.request.content) == {
+        "model": "m",
+        "draft": True,
+        "image_url": "https://x/i.png",
+    }
+
+
+async def test_queue_passes_reference_objects_through_extra(mock_api, async_client):
+    route = mock_api.post("/video/queue").respond(200, json={"model": "m", "queue_id": "q"})
+    refs = [{"image_url": "https://x/a.png", "name": "Ann"}]
+    vids = [{"video_url": "https://x/a.mp4"}]
+    await async_client.video.queue(model="m", image_references=refs, video_references=vids)
+    body = json.loads(route.calls.last.request.content)
+    assert body["image_references"] == refs and body["video_references"] == vids
+
+
+async def test_retrieve_parses_draft_fields(mock_api, async_client):
+    mock_api.post("/video/retrieve").respond(
+        200,
+        json={"status": "COMPLETED", "draft_task_id": "q1", "can_upgrade_to_hd": False},
+    )
+    result = await async_client.video.retrieve(queue_id="q1")
+    assert result.draft_task_id == "q1" and result.can_upgrade_to_hd is False

@@ -55,7 +55,7 @@ from veniceresch._generated import (
     WebSearchResponse,
 )
 from veniceresch._generated import ModelType as _VideoModelType
-from veniceresch._generated import Type99 as _ModelKind
+from veniceresch._generated import Type101 as _ModelKind
 
 # Rationale for the hand-written wrappers below:
 #
@@ -395,6 +395,11 @@ class VideoQueueResponse(VeniceBaseModel):
     model: str | None = None
     queue_id: str | None = None
     download_url: str | None = None
+    # Draft mode (``queue(draft=True)``, Seedance 2.5): upgrade the 480p draft
+    # by queueing again with ``draft_task_id`` before ``draft_expires_at``.
+    draft_task_id: str | None = None
+    draft_expires_at: str | None = None
+    can_upgrade_to_hd: bool | None = None
 
 
 class VideoRetrieveResponse(VeniceBaseModel):
@@ -424,6 +429,9 @@ class VideoRetrieveResponse(VeniceBaseModel):
     average_execution_time: float | None = None
     execution_duration: float | None = None
     download_url: str | None = None
+    draft_task_id: str | None = None
+    draft_expires_at: str | None = None
+    can_upgrade_to_hd: bool | None = None
     video: bytes | None = Field(default=None, repr=False)
     content_type: str | None = None
 

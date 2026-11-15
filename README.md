@@ -671,7 +671,7 @@ Run `bash scripts/regen_types.sh` with the venv active too (it uses
 | x402 | `/x402/balance/{walletAddress}`, `/x402/top-up`, `/x402/transactions/{walletAddress}` | — |
 | crypto | `/crypto/rpc/networks`, `/crypto/rpc/{network}` (JSON-RPC proxy) | — |
 
-All 49 live paths in Venice's current OpenAPI spec (`20261108`) are covered
+All 49 live paths in Venice's current OpenAPI spec (`20261113`) are covered
 (`/systemone` via its `/decisions` alias). The two retired paths keep
 deprecated stubs that raise `VeniceGoneError` and go away in 1.0. The x402 and
 web3 endpoints use wallet-based auth — this SDK accepts the signed header

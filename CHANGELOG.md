@@ -5,6 +5,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+Synced to Venice API spec `20261113` (was `20261108`). All changes upstream are
+additive; every operation stays covered.
+
+### Added
+
+- **Video draft mode** (Seedance 2.5 and other models with
+  `supportsDraftMode`): `video.queue()` / `video.quote()` take `draft=` and
+  `draft_task_id=`. `draft=True` renders a fast 480p draft; queueing again with
+  `draft_task_id` upgrades it to HD. Passing both raises `ValueError` before any
+  request (Venice rejects the combination). `VideoQueueResponse` and
+  `VideoRetrieveResponse` gain typed `draft_task_id`, `draft_expires_at` and
+  `can_upgrade_to_hd`.
+- New spec fields that pass through `**extra` with no wrapper change:
+  `image_references` / `video_references` on `video.queue()`, `image_url` on
+  `video.quote()`, `reference_audio_urls` on `audio.queue()`, `assets` on
+  `decisions.create()`. The typed model metadata picks up
+  `model_spec.supports_reference_audios` / `max_reference_audios` and
+  `VideoModelConstraints.per_reference_audio`.
+
+### Changed
+
+- `image.edit()` / `image.multi_edit()`: `aspect_ratio` is no longer an enum
+  upstream (the parameter was already a plain `str`).
+- x402 sign-in failures (401 on `/x402/balance`, `/x402/transactions`,
+  `/x402/top-up`) now carry `code` (`X402_SIGN_IN_*`) and `invalidReason` in
+  the body; they still raise `VeniceAuthError` with those on `error_body`.
+- Internal: the regen renumbered the generated model-kind enum (`Type99` →
+  `Type101`); the public `veniceresch.types.ModelType` alias was re-bound, so
+  nothing changes for callers. The guard test from 0.8.0 caught it.
+
 ### Development
 
 - A weekly workflow (`spec-drift.yml`, script `scripts/spec_drift.py`) compares
