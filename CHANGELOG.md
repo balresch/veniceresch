@@ -3,7 +3,11 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.8.0] — 2026-11-15
+
+Image edit ergonomics and typed model metadata, plus a fix for non-JSON 2xx
+bodies. All changes are backward-compatible: no renames or removals; the
+binary image methods now return a `bytes` subclass.
 
 ### Added
 
