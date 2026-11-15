@@ -5,7 +5,7 @@ info:
   description: The Venice.ai API.
   termsOfService: https://venice.ai/legal/tos
   title: Venice.ai API
-  version: "20261108.095455"
+  version: "20261113.174621"
   x-guidance: >-
     Venice.ai is an OpenAI-compatible inference API supporting text, image,
     audio, and video generation.
@@ -132,83 +132,73 @@ components:
       type: http
     siwx:
       description: >-
-        Wallet-based authentication using the x402 protocol (Sign-In-With-X).
-        Supports EVM SIWE signatures on Base and Ed25519 signatures on Solana
-        mainnet.
+        Wallet-based authentication using the x402 sign-in-with-x extension.
+        Supports EVM wallets on Base (EIP-4361 SIWE, including EIP-1271 smart
+        contract wallets) and Ed25519 wallets on Solana mainnet.
 
 
-        **Header format:** Base64-encoded JSON object with the following fields:
+        **Header format:** Base64-encoded JSON proof with these fields:
+
+        - `domain` — `api.venice.ai`
 
         - `address` — EVM or Solana wallet address
 
-        - `message` — Signed SIWX message. EVM wallets use EIP-4361 SIWE; Solana
-        wallets use the Solana SIWX message format.
+        - `uri` — URL of the requested resource
 
-        - `signature` — Signature of the message, signed by the wallet's private
-        key. EVM signatures are hex; Solana signatures may be base58 or base64.
+        - `version` — `"1"`
 
-        - `timestamp` — Unix timestamp in milliseconds
+        - `chainId` — `"eip155:8453"` for Base or
+        `"solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"` for Solana
 
-        - `chainId` — Chain identity. Use `8453`, `"8453"`, or `"eip155:8453"`
-        for Base; use `"solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"` for Solana.
+        - `type` — `"eip191"` for EVM wallets or `"ed25519"` for Solana
 
-        - `type` — Optional signature type. Use `"ed25519"` for Solana. Omitted
-        means EVM/EIP-191 for backward compatibility.
+        - `nonce` — the `nonce` from the latest 402 challenge
+        (`extensions["sign-in-with-x"].info.nonce`), or 32 random hex
+        characters. Each nonce works once.
 
+        - `issuedAt` — ISO 8601 time the proof was signed. Proofs older than 5
+        minutes are rejected.
 
-        **EVM SIWE message fields:**
+        - `expirationTime`, `notBefore`, `statement`, `resources` — optional
 
-        - `domain`: `api.venice.ai`
-
-        - `uri`: `https://api.venice.ai`
-
-        - `version`: `"1"`
-
-        - `chainId`: `8453`
-
-        - `nonce`: Random 16-character hex string
-
-        - `issuedAt` / `expirationTime`: ISO timestamps (recommended TTL: 10
-        minutes)
-
-        - `statement`: `"Sign in to Venice API"`
+        - `signature` — signature over the message built from these fields: an
+        EIP-4361 SIWE message for EVM (hex) or the Solana sign-in message
+        (base58)
 
 
-        **Example (TypeScript):**
+        Venice rebuilds the signed message from these fields, with the bare
+        reference on its `Chain ID` line (`8453`,
+        `5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`). Proofs from older clients that send
+        the signed `message` itself are still accepted.
+
+
+        **Example (TypeScript, viem):**
 
         ```
 
-        import { Wallet } from 'ethers'
+        import { privateKeyToAccount } from 'viem/accounts'
 
-        import { SiweMessage } from 'siwe'
+        import { createSiweMessage } from 'viem/siwe'
 
 
-        const wallet = new Wallet(PRIVATE_KEY)
+        const account = privateKeyToAccount(PRIVATE_KEY)
 
-        const msg = new SiweMessage({ domain: 'api.venice.ai', address:
-        wallet.address, statement: 'Sign in to Venice API', uri:
-        'https://api.venice.ai', version: '1', chainId: 8453, nonce:
-        crypto.randomUUID().replace(/-/g, '').slice(0, 16), issuedAt: new
-        Date().toISOString(), expirationTime: new Date(Date.now() +
-        600000).toISOString() })
+        const fields = { domain: 'api.venice.ai', address: account.address, uri:
+        'https://api.venice.ai/api/v1/chat/completions', version: '1' as const,
+        nonce: crypto.randomUUID().replace(/-/g, ''), issuedAt: new
+        Date().toISOString(), statement: 'Sign in to Venice AI' }
 
-        const signature = await wallet.signMessage(msg.prepareMessage())
+        const message = createSiweMessage({ ...fields, chainId: 8453, issuedAt:
+        new Date(fields.issuedAt) })
 
-        const header = btoa(JSON.stringify({ address: wallet.address, message:
-        msg.prepareMessage(), signature, timestamp: Date.now(), chainId: 8453
-        }))
+        const signature = await account.signMessage({ message })
+
+        const header = btoa(JSON.stringify({ ...fields, chainId: 'eip155:8453',
+        type: 'eip191', signature }))
 
         // Set header: SIGN-IN-WITH-X: <header>
 
         ```
-
-
-        **Solana message fields:** The signed message starts with `<domain>
-        wants you to sign in with your Solana account:`, followed by the wallet
-        address and the standard `URI`, `Version`, `Chain ID`, `Nonce`, `Issued
-        At`, and optional `Expiration Time` fields. Use `type: "ed25519"` and
-        `chainId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"` in the encoded JSON
-        payload.
 
 
         **SDK:** `npm install venice-x402-client` provides `VeniceClient` and
@@ -395,8 +385,11 @@ components:
                     example: exact
                   network:
                     type: string
-                    description: Payment network for this requirement.
-                    example: solana
+                    description: Payment network for this requirement in CAIP-2 form (e.g.
+                      `eip155:8453` for Base,
+                      `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` for Solana
+                      mainnet).
+                    example: solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp
                   asset:
                     type: string
                     description: USDC token address or mint for the selected network.
@@ -626,8 +619,8 @@ components:
                       example: "1"
                     nonce:
                       type: string
-                      description: Unique nonce for replay protection.
-                      example: "{{nonce}}"
+                      description: "Server-generated nonce for replay protection: 32 hex characters."
+                      example: a1b2c3d4e5f67890a1b2c3d4e5f67890
                     issuedAt:
                       type: string
                       description: ISO timestamp when the challenge was issued.
@@ -662,18 +655,24 @@ components:
                         type: string
                         enum:
                           - eip191
-                          - eip1271
                           - ed25519
-                        description: Signature type accepted for this chain.
+                        description: "Signature algorithm: `eip191` for EVM wallets (EOAs and smart
+                          contract wallets), `ed25519` for Solana."
                         example: ed25519
                     required:
                       - chainId
                       - type
                     additionalProperties: false
                   description: Supported SIWX chains and signature types.
+                schema:
+                  type: object
+                  properties: {}
+                  description: JSON Schema of the proof the client sends in the `SIGN-IN-WITH-X`
+                    header.
               required:
                 - info
                 - supportedChains
+                - schema
               additionalProperties: false
           required:
             - error
@@ -3991,17 +3990,8 @@ components:
           example: end-user-123
         aspect_ratio:
           type: string
-          enum:
-            - auto
-            - 1:1
-            - 3:2
-            - 16:9
-            - 21:9
-            - 9:16
-            - 2:3
-            - 3:4
-            - 4:3
-            - 4:5
+          maxLength: 32
+          pattern: ^(?:auto|\d+(?:\.\d+)?:\d+(?:\.\d+)?)$
           description: The aspect ratio for the output image. Use 'auto' or omit this
             parameter to infer the closest supported aspect ratio from the input
             image when explicit sizing is required by the model. Supported
@@ -4113,17 +4103,8 @@ components:
           example: end-user-123
         aspect_ratio:
           type: string
-          enum:
-            - auto
-            - 1:1
-            - 3:2
-            - 16:9
-            - 21:9
-            - 9:16
-            - 2:3
-            - 3:4
-            - 4:3
-            - 4:5
+          maxLength: 32
+          pattern: ^(?:auto|\d+(?:\.\d+)?:\d+(?:\.\d+)?)$
           description: The aspect ratio for the output image. Use 'auto' or omit this
             parameter to infer the closest supported aspect ratio from the first
             input image when explicit sizing is required by the model.
@@ -4242,17 +4223,8 @@ components:
           example: end-user-123
         aspect_ratio:
           type: string
-          enum:
-            - auto
-            - 1:1
-            - 3:2
-            - 16:9
-            - 21:9
-            - 9:16
-            - 2:3
-            - 3:4
-            - 4:3
-            - 4:5
+          maxLength: 32
+          pattern: ^(?:auto|\d+(?:\.\d+)?:\d+(?:\.\d+)?)$
           description: The aspect ratio for the output image. Use 'auto' or omit this
             parameter to infer the closest supported aspect ratio from the first
             input image when explicit sizing is required by the model.
@@ -4553,6 +4525,36 @@ components:
           maxItems: 4
           description: Up to 4 images the model should look at. Each entry is a `data:`
             URI or `{ content_type, base64 }`. Remote URLs are not fetched.
+        assets:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              data_base64:
+                type: string
+                minLength: 1
+                description: "Base64 image bytes with no data: prefix."
+              format:
+                type: string
+                enum:
+                  - png
+                  - jpg
+                  - jpeg
+                description: Image format, lowercase. jpeg is another name for jpg.
+              type:
+                type: string
+                enum:
+                  - image
+                description: Asset kind. Optional. If set, it must be image.
+            required:
+              - data_base64
+              - format
+            additionalProperties: false
+          description: Jev images, keyed by the reference string used in state,
+            instructions, or criteria. Rejected for every other decision model.
+            Each value is an image asset with data_base64 and format (png, jpg,
+            or jpeg). type must be image when set. Multipart part names are not
+            accepted.
         questions:
           type: object
           additionalProperties:
@@ -5222,6 +5224,40 @@ components:
             character/style consistency. Each must be a URL or data URL.
           example:
             - data:image/png;base64,iVBORw0K...
+        image_references:
+          type: array
+          items:
+            type: object
+            properties:
+              image_url:
+                type: string
+                description: The reference image. Must be a URL or data URL.
+              type:
+                type: string
+                enum:
+                  - subject
+                  - background
+                description: Whether the image shows a subject or a background. Used by PixVerse
+                  C1 reference-to-video; defaults to subject.
+              ref_name:
+                type: string
+                description: The name the prompt uses for the image. Used by PixVerse C1
+                  reference-to-video; defaults to Image1, Image2 and so on.
+              audio_url:
+                type: string
+                description: The voice of the person or character in this image, on models whose
+                  GET /models constraints.per_reference_audio is true. WAV or
+                  MP3, as a URL or data URL.
+            required:
+              - image_url
+          maxItems: 30
+          description: For models with reference image support, up to 30 reference images
+            given as objects instead of plain URLs, so each one can have a type,
+            a name in the prompt or its own voice. Wan 2.7 reference-to-video
+            takes at most 5 reference images and videos combined.
+          example:
+            - image_url: https://example.com/character.png
+              audio_url: https://example.com/voice.mp3
         reference_video_urls:
           type: array
           items:
@@ -5248,6 +5284,31 @@ components:
             URL.'
           example:
             - data:audio/mpeg;base64,SUQzBAAAAAA...
+        video_references:
+          type: array
+          items:
+            type: object
+            properties:
+              video_url:
+                type: string
+                description: The reference clip. Must be a URL or data URL.
+              ref_name:
+                type: string
+                description: An optional label for the reference.
+              audio_url:
+                type: string
+                description: The voice of the person or character in this clip. WAV or MP3, as a
+                  URL or data URL.
+            required:
+              - video_url
+          maxItems: 5
+          description: For models whose GET /models constraints.per_reference_audio is
+            true (e.g. Wan 2.7 reference-to-video), up to 5 reference clips,
+            each with an optional voice for the person or character in it. Wan
+            2.7 takes at most 5 reference images and videos combined.
+          example:
+            - video_url: https://example.com/reference-clip.mp4
+              audio_url: https://example.com/voice.mp3
         reference_document_urls:
           type: array
           items:
@@ -5312,6 +5373,19 @@ components:
               frame_index: 0
             - image_url: data:image/png;base64,iVBORw0K...
               frame_index: 120
+        draft:
+          type: boolean
+          description: Seedance 2.5 only (models with supportsDraftMode). Generate a fast
+            480p draft. The response includes draft_task_id; upgrade it to 1080p
+            within 7 days by sending draft_task_id.
+          example: false
+        draft_task_id:
+          type: string
+          format: uuid
+          description: Seedance 2.5 only. queue_id of your own draft to upgrade to 1080p.
+            Duration, aspect ratio and audio follow the draft; media inputs are
+            ignored. Cannot be combined with draft.
+          example: 123e4567-e89b-12d3-a456-426614174000
       required:
         - model
         - duration
@@ -5460,6 +5534,12 @@ components:
           description: For upscale models, the video to upscale. Required to auto-detect
             duration for pricing.
           example: data:video/mp4;base64,AAAAFGZ0eXA...
+        image_url:
+          type: string
+          description: For image-to-video models, the reference image. When aspect_ratio
+            is auto, the quote reads this image the same way queue billing does.
+            Must be an http(s) URL or a data URL.
+          example: data:image/png;base64,iVBORw0K...
         reference_video_total_duration:
           type: number
           minimum: 0
@@ -5472,6 +5552,16 @@ components:
             (`adaptive`/`auto`). When omitted for ordinary fixed-duration
             quotes, the quote returns the no-reference baseline.
           example: 5
+        draft:
+          type: boolean
+          description: Seedance 2.5 only. Quote a 480p draft.
+          example: false
+        draft_task_id:
+          type: string
+          format: uuid
+          description: Seedance 2.5 only. Quote the 1080p HD upgrade of your own draft.
+            Requires authentication.
+          example: 123e4567-e89b-12d3-a456-426614174000
       required:
         - model
         - duration
@@ -5509,7 +5599,8 @@ components:
           default: false
           description: If true, the video media will be deleted from storage after the
             request is completed. If false, you can use the complete endpoint to
-            remove the media once you have successfully downloaded the video.
+            remove the media once you have successfully downloaded the video. A
+            draft created with `draft` is kept until its HD upgrade window ends.
           example: false
       required:
         - queue_id
@@ -5620,6 +5711,21 @@ components:
             reports `supports_speed=true`; use the model-specific `min_speed`
             and `max_speed` values.
           example: 1
+        reference_audio_urls:
+          type: array
+          items:
+            type: string
+          description: Optional reference audio clips. Only supported when `/models`
+            reports `supports_reference_audios=true`; send at most
+            `max_reference_audios` clips. Refer to them in the prompt in order
+            as `@Audio1`, `@Audio2`, and so on. Each clip must be audio without
+            video, at most 30 seconds and 10 MB, sent as a base64 data URL (for
+            example `data:audio/mpeg;base64,...`). http(s) URLs are not
+            supported. All clips together must be at most about 22 MB. Cannot be
+            combined with a preset `voice`; omit `voice` or set it to `Describe
+            in prompt`.
+          example:
+            - data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA
       required:
         - model
         - prompt
@@ -6354,7 +6460,7 @@ components:
         id:
           type: string
           description: Model ID
-          example: gemini-4-argon
+          example: gemini-4-carbon
         model_spec:
           type: object
           properties:
@@ -6790,6 +6896,12 @@ components:
                       type: boolean
                       description: Can audio be enabled or disabled for the video generation?
                       example: true
+                    per_reference_audio:
+                      type: boolean
+                      description: Can each reference carry its own voice? When true, POST
+                        /video/queue takes an `audio_url` on each
+                        `image_references` and `video_references` entry.
+                      example: false
                     prompt_character_limit:
                       type: number
                       description: The maximum supported prompt length for this video model. If not
@@ -6878,6 +6990,7 @@ components:
                     - model_type
                     - audio
                     - audio_configurable
+                    - per_reference_audio
                   description: Constraints that apply to video models.
                   title: Video Model Constraints
                 - type: object
@@ -6982,7 +7095,7 @@ components:
             name:
               type: string
               description: The name of the model.
-              example: Gemini 4 Argon
+              example: Gemini 4 Carbon
             modelSource:
               type: string
               description: The source of the model, such as a URL to the model repository.
@@ -7734,6 +7847,16 @@ components:
               description: Whether this music model supports an ISO 639-1 language_code
                 parameter.
               example: true
+            supports_reference_audios:
+              type: boolean
+              description: Whether this audio-generation model accepts reference audio clips
+                in the reference_audio_urls request parameter.
+              example: true
+            max_reference_audios:
+              type: integer
+              description: Maximum number of clips accepted in reference_audio_urls. Present
+                only when supports_reference_audios is true.
+              example: 3
             voice_changer:
               type: boolean
               description: Whether this model performs speech-to-speech conversion. Present
@@ -7936,6 +8059,26 @@ components:
       description: List of available models
       example:
         gpt-4o: openai-gpt-4o-2024-11-20
+    X402SignInError:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable reason the Sign-in-with-X proof was rejected.
+          example: This nonce has already been used
+        code:
+          type: string
+          description: Machine-readable `X402_SIGN_IN_*` code naming the failed check.
+          example: X402_SIGN_IN_NONCE_REUSED
+        invalidReason:
+          type: string
+          description: The sign-in-with-x spec code (`invalid_siwx_*`) for the failed
+            check, when the spec names it.
+          example: invalid_siwx_nonce
+      required:
+        - error
+        - code
+      additionalProperties: false
     WebScrapeResponse:
       type: object
       properties:
@@ -8004,7 +8147,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createChatCompletion
       parameters:
         - description: Supported compression encodings (gzip, br). Only applied when
@@ -8666,6 +8812,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -8756,7 +8907,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createResponse
       security:
         - BearerAuth: []
@@ -9167,6 +9321,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -9208,7 +9367,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: generateImage
       parameters:
         - description: Supported compression encodings (gzip, br). Only applied when
@@ -9409,6 +9571,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -9472,7 +9639,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: simpleGenerateImage
       parameters:
         - description: Supported compression encodings (gzip, br).
@@ -9631,6 +9801,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -9740,7 +9915,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: upscaleImage
       requestBody:
         content:
@@ -9820,6 +9998,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -9885,7 +10068,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: editImage
       requestBody:
         content:
@@ -9899,9 +10085,9 @@ paths:
                       type: string
                       enum:
                         - firered-image-edit
+                        - seedream-v5-5-edit
                         - qwen-edit-uncensored
                         - grok-imagine-edit
-                        - grok-imagine-quality-edit
                         - grok-imagine-image-2-0-edit
                         - krea-3-edit
                         - qwen-image-2-edit
@@ -9922,6 +10108,7 @@ paths:
                         - nano-banana-2-lite-edit
                         - luma-uni-1-edit
                         - luma-uni-1-max-edit
+                        - minimax-h3-image-edit
                         - muse-image-edit
                         - seedream-v5-lite-edit
                         - seedream-v5-pro-edit
@@ -9940,9 +10127,9 @@ paths:
                       type: string
                       enum:
                         - firered-image-edit
+                        - seedream-v5-5-edit
                         - qwen-edit-uncensored
                         - grok-imagine-edit
-                        - grok-imagine-quality-edit
                         - grok-imagine-image-2-0-edit
                         - krea-3-edit
                         - qwen-image-2-edit
@@ -9963,6 +10150,7 @@ paths:
                         - nano-banana-2-lite-edit
                         - luma-uni-1-edit
                         - luma-uni-1-max-edit
+                        - minimax-h3-image-edit
                         - muse-image-edit
                         - seedream-v5-lite-edit
                         - seedream-v5-pro-edit
@@ -10090,6 +10278,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -10165,7 +10358,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: multiEditImage
       requestBody:
         content:
@@ -10179,9 +10375,9 @@ paths:
                       type: string
                       enum:
                         - firered-image-edit
+                        - seedream-v5-5-edit
                         - qwen-edit-uncensored
                         - grok-imagine-edit
-                        - grok-imagine-quality-edit
                         - grok-imagine-image-2-0-edit
                         - krea-3-edit
                         - qwen-image-2-edit
@@ -10200,6 +10396,7 @@ paths:
                         - nano-banana-2-1-edit
                         - nano-banana-pro-edit
                         - nano-banana-2-lite-edit
+                        - minimax-h3-image-edit
                         - muse-image-edit
                         - seedream-v5-lite-edit
                         - seedream-v5-pro-edit
@@ -10218,9 +10415,9 @@ paths:
                       type: string
                       enum:
                         - firered-image-edit
+                        - seedream-v5-5-edit
                         - qwen-edit-uncensored
                         - grok-imagine-edit
-                        - grok-imagine-quality-edit
                         - grok-imagine-image-2-0-edit
                         - krea-3-edit
                         - qwen-image-2-edit
@@ -10239,6 +10436,7 @@ paths:
                         - nano-banana-2-1-edit
                         - nano-banana-pro-edit
                         - nano-banana-2-lite-edit
+                        - minimax-h3-image-edit
                         - muse-image-edit
                         - seedream-v5-lite-edit
                         - seedream-v5-pro-edit
@@ -10356,6 +10554,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -10412,7 +10615,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: backgroundRemoveImage
       requestBody:
         content:
@@ -10490,6 +10696,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
@@ -13014,7 +13225,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createEmbedding
       parameters:
         - description: Supported compression encodings (gzip, br)
@@ -13171,6 +13385,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -13235,7 +13454,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createDecision
       parameters:
         - description: Supported compression encodings (gzip, br)
@@ -13446,6 +13668,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
@@ -13708,6 +13935,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -13775,7 +14007,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createSpeech
       requestBody:
         content:
@@ -13875,6 +14110,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -13939,7 +14179,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createTranscription
       requestBody:
         content:
@@ -14081,6 +14324,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -14185,7 +14433,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createClonedVoice
       requestBody:
         content:
@@ -14282,6 +14533,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -14349,14 +14605,18 @@ paths:
         Delete a video generation request from storage after it has been
         successfully downloaded. Videos can be automatically deleted after
         retrieval by setting the `delete_media_on_completion` flag to true when
-        calling the retrieve API.
+        calling the retrieve API. A draft created with `draft` is kept until its
+        HD upgrade window ends, so it can still be upgraded.
 
 
         **Authentication:** This endpoint accepts either a Bearer API key or a
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: completeVideo
       security:
         - BearerAuth: []
@@ -14441,6 +14701,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -14483,7 +14748,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: queueVideo
       security:
         - BearerAuth: []
@@ -14535,6 +14803,23 @@ paths:
                       returns JSON status only (no video stream). Fetch this URL
                       after status is COMPLETED to get the video/mp4 file. Valid
                       for 24 hours.
+                  is_draft:
+                    type: boolean
+                    description: Present and true when this request is a draft.
+                    example: true
+                  draft_task_id:
+                    type: string
+                    description: Pass as draft_task_id on a new queue request to upgrade this draft
+                      to 1080p or 4k.
+                    example: 123e4567-e89b-12d3-a456-426614174000
+                  draft_expires_at:
+                    type: string
+                    description: ISO timestamp after which the draft can no longer be upgraded.
+                    example: 2026-10-20T08:00:00.000Z
+                  can_upgrade_to_hd:
+                    type: boolean
+                    description: Whether the draft can be upgraded to HD right now.
+                    example: false
                 required:
                   - model
                   - queue_id
@@ -14579,6 +14864,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
@@ -14745,7 +15035,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: retrieveVideo
       security:
         - BearerAuth: []
@@ -14799,6 +15092,23 @@ paths:
                     description: The current duration of the video generation request in
                       milliseconds.
                     example: 53200
+                  is_draft:
+                    type: boolean
+                    description: Present and true when this request is a draft.
+                    example: true
+                  draft_task_id:
+                    type: string
+                    description: Pass as draft_task_id on a new queue request to upgrade this draft
+                      to 1080p or 4k.
+                    example: 123e4567-e89b-12d3-a456-426614174000
+                  draft_expires_at:
+                    type: string
+                    description: ISO timestamp after which the draft can no longer be upgraded.
+                    example: 2026-10-20T08:00:00.000Z
+                  can_upgrade_to_hd:
+                    type: boolean
+                    description: Whether the draft can be upgraded to HD right now.
+                    example: false
                 required:
                   - status
                   - average_execution_time
@@ -14847,6 +15157,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
@@ -14958,7 +15273,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: createTextParser
       requestBody:
         content:
@@ -15067,6 +15385,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -15122,7 +15445,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: completeAudio
       security:
         - BearerAuth: []
@@ -15208,6 +15534,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -15243,7 +15574,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: queueAudio
       security:
         - BearerAuth: []
@@ -15345,6 +15679,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -15441,7 +15780,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: retrieveAudio
       security:
         - BearerAuth: []
@@ -15552,6 +15894,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -15637,7 +15984,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: queueVoiceChanger
       security:
         - BearerAuth: []
@@ -15748,6 +16098,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
@@ -15901,7 +16256,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: retrieveVoiceChanger
       security:
         - BearerAuth: []
@@ -16001,6 +16359,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
@@ -16126,7 +16489,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: completeVoiceChanger
       security:
         - BearerAuth: []
@@ -16194,6 +16560,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
@@ -17047,7 +17418,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: cryptoRpcProxy
       parameters:
         - description: Venice-side network slug. Call `GET /api/v1/crypto/rpc/networks`
@@ -17429,11 +17803,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetailedError"
         "401":
-          description: Missing or invalid Sign-in-with-x authentication.
+          description: Invalid Sign-in-with-x proof. A request without the header gets
+            `402` instead.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StandardError"
+                $ref: "#/components/schemas/X402SignInError"
         "403":
           description: Authenticated wallet does not match the requested wallet.
           content:
@@ -17549,6 +17924,33 @@ paths:
                 additionalProperties: false
         "400":
           description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Machine-readable x402 error code.
+                    example: X402_INVALID_PAYMENT
+                  message:
+                    type: string
+                    description: Human-readable description of the x402 failure.
+                    example: Invalid payment header
+                  details:
+                    type: object
+                    properties: {}
+                    description: Optional structured details about the x402 error.
+                    example:
+                      reason: signature_mismatch
+                required:
+                  - error
+                  - message
+                additionalProperties: false
+        "401":
+          description: "Error code `X402_USER_NOT_ALLOWED`: the Venice account of the
+            paying wallet is banned or deleted, or the x402 credit account of
+            the wallet belongs to a different user. The payment is not settled."
           content:
             application/json:
               schema:
@@ -17820,11 +18222,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetailedError"
         "401":
-          description: Missing or invalid Sign-in-with-x authentication.
+          description: Invalid Sign-in-with-x proof. A request without the header gets
+            `402` instead.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/StandardError"
+                $ref: "#/components/schemas/X402SignInError"
         "403":
           description: Authenticated wallet does not match the requested wallet.
           content:
@@ -17855,7 +18258,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: webScrape
       security:
         - BearerAuth: []
@@ -17931,6 +18337,11 @@ paths:
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
 
 
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
+
+
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
             protocol object with the payment requirements for programmatic
             discovery.
@@ -18003,7 +18414,10 @@ paths:
         `SIGN-IN-WITH-X` header for x402 wallet-based authentication. The legacy
         `X-Sign-In-With-X` header is also accepted during migration. When using
         x402, a `402 Payment Required` response indicates insufficient balance
-        and includes top-up instructions.
+        and includes top-up instructions. A `401` response with code
+        `X402_USER_NOT_ALLOWED` means the wallet's Venice account is banned or
+        deleted, or the wallet's x402 credit account belongs to a different
+        user.
       operationId: webSearch
       security:
         - BearerAuth: []
@@ -18077,6 +18491,11 @@ paths:
             - `supportedTokens` / `supportedChains`: Accepted payment methods
 
             - `siwxChallenge`: Fresh Sign-In-With-X challenge metadata
+
+
+            A wallet that has never completed a top-up has no Venice account yet
+            and receives this response with a balance of `0`. The first
+            successful top-up creates the account.
 
 
             The `PAYMENT-REQUIRED` header also contains a base64-encoded x402
