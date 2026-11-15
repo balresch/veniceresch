@@ -328,6 +328,32 @@ if page.nextCursor:
 csv_page = await client.billing.usage_history_csv(currency="DIEM")
 ```
 
+`models.list()` returns `.data` as plain dicts (drift-tolerant). For typed
+metadata, `parsed_data()` validates each record into a `ModelResponse`; the
+`model_spec.constraints` / `.pricing` unions narrow with the public aliases in
+`veniceresch.types`:
+
+```python
+from veniceresch.types import InpaintModelConstraints, ModelType, TextModelPricing
+
+for m in (await client.models.list(type="all")).parsed_data():
+    spec = m.model_spec
+    if m.type == ModelType.text and isinstance(spec.pricing, TextModelPricing):
+        print(m.id, spec.pricing.input.usd, spec.pricing.output.usd)
+    if isinstance(spec.constraints, InpaintModelConstraints):
+        print(m.id, "max input images:", spec.constraints.maxInputImages)
+```
+
+Constraint variants: `TextModelConstraints`, `ImageModelConstraints`,
+`VideoModelConstraints`, `InpaintModelConstraints` (union: `ModelConstraints`).
+Pricing variants: `TextModelPricing`, `ImageModelPricing`, `TtsModelPricing`,
+`AsrModelPricing`, `InpaintModelPricing`, `MusicGenerationPricing`,
+`MusicPerSecondPricing`, `DurationTierPricing`, `PerThousandCharactersPricing`
+(union: `ModelPricing`). Also `ModelSpec`, `ModelCapabilities`, `ModelType`
+(the model kind) and `VideoModelType` (`text-to-video` / `image-to-video`).
+Import these rather than the numbered `Constraints1` / `Pricing4` classes in
+`_generated`, whose names can shift when the spec is regenerated.
+
 `billing.usage()` / `iter_usage()` are **deprecated**: Venice sunset
 `/billing/usage` on 2026-09-16 (HTTP 410). They raise `VeniceGoneError`
 without a network call. Migrate `page`/`limit` → `page_size` + cursor and

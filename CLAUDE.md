@@ -51,6 +51,8 @@ Two distinct layers; they must stay distinct:
 
 Hand-authored wrappers in `types.py` (`ModelList`, `ChatCompletionResponse`, etc.) use `list[dict[str, Any]]` for nested collections rather than strict generated types. Pydantic validates recursively, so nesting a strict schema inside a tolerant wrapper reintroduces validation fragility. Callers who need the typed nested form parse an element explicitly: `ModelResponse.model_validate(result.data[0])`.
 
+**Public names for positional generated classes.** The generator names anonymous `anyOf` members and inline enums by position (`Constraints1`, `Pricing4`, `Type99`); those numbers can shift on a regen, so they are never exported as-is. `types.py` binds semantic aliases instead (`TextModelConstraints = Constraints1`, `ModelType = Type99`, `VideoModelType` = the generated `ModelType`, unions `ModelConstraints` / `ModelPricing`), and `tests/test_model_types.py` pins each alias to its field set. After `regen_types.sh`, a failure there means re-bind the alias to whichever class now has those fields, and add an alias for any new variant.
+
 Generated response types used directly by resources (`BillingBalanceResponse`, `ResponsesResponse`, …) use `Cls.model_construct(**raw)` rather than `model_validate` — skipping strict schema validation — so missing/renamed required fields in Venice's responses won't break the client.
 
 ## Commands

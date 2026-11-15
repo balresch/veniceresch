@@ -29,9 +29,24 @@ from veniceresch._generated import (
     BillingBalanceResponse,
     BillingUsageAnalyticsResponse,
     BillingUsageHistoryResponse,
+    Capabilities,
+    Constraints,
+    Constraints1,
+    Constraints2,
+    Constraints3,
     ModelCompatibilitySchema,
     ModelResponse,
+    ModelSpec,
     ModelTraitSchema,
+    Pricing,
+    Pricing1,
+    Pricing2,
+    Pricing3,
+    Pricing4,
+    Pricing5,
+    Pricing6,
+    Pricing7,
+    Pricing8,
     ResponsesResponse,
     SimpleGenerateImageRequest,
     WebScrapeRequest,
@@ -39,6 +54,8 @@ from veniceresch._generated import (
     WebSearchRequest,
     WebSearchResponse,
 )
+from veniceresch._generated import ModelType as _VideoModelType
+from veniceresch._generated import Type99 as _ModelKind
 
 # Rationale for the hand-written wrappers below:
 #
@@ -108,6 +125,77 @@ class ResponsesChunk(VeniceBaseModel):
 
 
 # ---- models --------------------------------------------------------------
+
+
+# Public names for the typed model metadata ``ModelList.parsed_data()`` returns.
+#
+# datamodel-code-generator names the anonymous ``anyOf`` members of
+# ``model_spec.constraints`` / ``model_spec.pricing`` (and some inline enums)
+# *positionally*: ``Constraints1``, ``Pricing4``, ``Type99``. Those numbers can
+# shift when Venice adds or reorders a variant, so they are not public API.
+# These aliases name each variant by what it is (from the swagger ``title`` /
+# field descriptions). tests/test_model_types.py pins every alias to its
+# fields, so a regen that reshuffles the numbering fails CI instead of silently
+# re-pointing an alias at a different schema. Narrow with ``isinstance``:
+#
+#     spec = models.parsed_data()[0].model_spec
+#     if isinstance(spec.pricing, TextModelPricing):
+#         spec.pricing.input.usd
+
+ModelCapabilities = Capabilities
+"""``model_spec.capabilities`` (text-model capabilities: ``supportsReasoning``, …)."""
+
+ModelType = _ModelKind
+"""The model kind on ``ModelResponse.type``: ``text``, ``image``, ``tts``, ``video``, …"""
+
+VideoModelType = _VideoModelType
+"""``VideoModelConstraints.model_type``: ``text-to-video`` / ``image-to-video`` / ``video``."""
+
+ImageModelConstraints = Constraints
+"""Constraints for image models (``steps``, ``widthHeightDivisor``, ``aspectRatios``, …)."""
+TextModelConstraints = Constraints1
+"""Constraints for text models (``temperature``, ``top_p``, penalties)."""
+VideoModelConstraints = Constraints2
+"""Constraints for video models (``durations``, ``resolutions``, ``model_type``, …)."""
+InpaintModelConstraints = Constraints3
+"""Constraints for inpaint/edit models (``maxInputImages``, ``combineImages``, …)."""
+
+ModelConstraints = (
+    ImageModelConstraints | TextModelConstraints | VideoModelConstraints | InpaintModelConstraints
+)
+"""Any variant of ``model_spec.constraints``."""
+
+TextModelPricing = Pricing
+"""Token-based pricing for chat (LLM) models: ``input`` / ``output`` per million tokens."""
+ImageModelPricing = Pricing1
+"""Image generation and upscale pricing."""
+TtsModelPricing = Pricing2
+"""TTS pricing per million input characters."""
+AsrModelPricing = Pricing3
+"""Speech-to-text pricing per audio second."""
+InpaintModelPricing = Pricing4
+"""Image editing / inpainting pricing."""
+MusicGenerationPricing = Pricing5
+"""Flat price per music generation."""
+DurationTierPricing = Pricing6
+"""Pricing by output-duration tier (``durations``)."""
+MusicPerSecondPricing = Pricing7
+"""Price per second of generated music."""
+PerThousandCharactersPricing = Pricing8
+"""Price per thousand input characters."""
+
+ModelPricing = (
+    TextModelPricing
+    | ImageModelPricing
+    | TtsModelPricing
+    | AsrModelPricing
+    | InpaintModelPricing
+    | MusicGenerationPricing
+    | DurationTierPricing
+    | MusicPerSecondPricing
+    | PerThousandCharactersPricing
+)
+"""Any variant of ``model_spec.pricing``."""
 
 
 class ModelList(VeniceBaseModel):
@@ -715,6 +803,7 @@ __all__ = [
     "ApiKeyRateLimitLogsResponse",
     "ApiKeyRateLimitsResponse",
     "ApiKeyUpdateResponse",
+    "AsrModelPricing",
     "AudioCompleteResponse",
     "AudioQueueResponse",
     "AudioQuoteResponse",
@@ -733,24 +822,42 @@ __all__ = [
     "ClonedVoiceResponse",
     "CryptoRpcNetworksResponse",
     "DecisionResponse",
+    "DurationTierPricing",
     "EmbeddingsResponse",
     "GenerateImageResponse",
     "ImageBytes",
+    "ImageModelConstraints",
+    "ImageModelPricing",
     "ImageResponseMetadata",
     "ImageStylesResponse",
+    "InpaintModelConstraints",
+    "InpaintModelPricing",
+    "ModelCapabilities",
     "ModelCompatibilityResponse",
     "ModelCompatibilitySchema",
+    "ModelConstraints",
     "ModelList",
+    "ModelPricing",
     "ModelResponse",
+    "ModelSpec",
     "ModelTraitSchema",
     "ModelTraitsResponse",
+    "ModelType",
+    "MusicGenerationPricing",
+    "MusicPerSecondPricing",
     "OpenAIImageResponse",
+    "PerThousandCharactersPricing",
     "ResponsesChunk",
     "ResponsesResponse",
     "SimpleGenerateImageRequest",
+    "TextModelConstraints",
+    "TextModelPricing",
     "TextParserResponse",
+    "TtsModelPricing",
     "VeniceBaseModel",
     "VideoCompleteResponse",
+    "VideoModelConstraints",
+    "VideoModelType",
     "VideoQueueResponse",
     "VideoQuoteResponse",
     "VideoRetrieveResponse",
