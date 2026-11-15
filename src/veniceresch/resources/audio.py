@@ -17,6 +17,7 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
+from veniceresch._content import _parse_json_body
 from veniceresch._errors import VeniceAPIError
 from veniceresch.resources._polling import (
     VeniceJobFailedError,
@@ -127,7 +128,9 @@ def _header_float(response: httpx.Response, name: str) -> float | None:
 def _vc_retrieve_result(response: httpx.Response) -> VoiceChangerRetrieveResponse:
     content_type = response.headers.get("content-type", "")
     if content_type.split(";", 1)[0].strip().lower() == "application/json":
-        return VoiceChangerRetrieveResponse.model_validate(response.json())
+        return VoiceChangerRetrieveResponse.model_validate(
+            _parse_json_body(response, "/audio/voice-changer/retrieve")
+        )
     return VoiceChangerRetrieveResponse(
         status="COMPLETED",
         audio=response.content,

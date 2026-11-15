@@ -11,7 +11,6 @@ plug in whatever retry policy they prefer. See ``_errors.py``.
 
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
@@ -20,8 +19,8 @@ from typing import Any
 import httpx
 from typing_extensions import Self
 
+from veniceresch._content import _guard_binary_content_type, _parse_json_body
 from veniceresch._errors import (
-    VeniceUnexpectedContentTypeError,
     raise_for_response,
     translate_httpx_error,
 )
@@ -59,94 +58,6 @@ def _has_header(headers: Mapping[str, str] | None, name: str) -> bool:
         return False
     target = name.lower()
     return any(k.lower() == target for k in headers)
-
-
-def _is_textual_content_type(main_type: str) -> bool:
-    """True for content types that are text, not binary media.
-
-    Any ``text/*`` plus the XML family. JSON is handled separately because it
-    carries a more specific hint (VPS-backed video download_url).
-    """
-    return main_type.startswith("text/") or main_type in (
-        "application/xml",
-        "application/xhtml+xml",
-    )
-
-
-def _request_accepts(request: httpx.Request | None, main_type: str) -> bool:
-    """True if the request's ``Accept`` header advertised this content type.
-
-    A 2xx body whose media type matches what the caller explicitly asked for is
-    by definition not "unexpected", so the binary guard lets it through — even
-    when it is textual (e.g. ``augment.parse_text`` asks for ``text/plain``).
-    This is the rule the old per-endpoint ``allowed_content_types`` allow-list
-    only gestured at; honoring ``Accept`` captures it once for every caller.
-    Supports ``*/*`` and ``type/*`` wildcards.
-    """
-    if request is None or not main_type:
-        return False
-    accept = request.headers.get("accept", "")
-    if not accept:
-        return False
-    accepted = {part.split(";", 1)[0].strip().lower() for part in accept.split(",")}
-    accepted.discard("")
-    if "*/*" in accepted or main_type in accepted:
-        return True
-    top = main_type.split("/", 1)[0]
-    return f"{top}/*" in accepted
-
-
-def _guard_binary_content_type(response: httpx.Response) -> None:
-    """Raise if a binary request got a textual 2xx body instead of media bytes.
-
-    Venice's VPS-backed video models answer ``/video/retrieve`` with a JSON
-    status object even when ``Accept: video/mp4`` was sent. Other textual 2xx
-    bodies (a CDN error page, an auth-proxy interstitial, a presigned-URL error)
-    are the same class of silent corruption: without this guard they would be
-    returned verbatim as ``bytes``. Genuine media (``video/mp4``, ``image/png``,
-    ``application/octet-stream``, …) and untyped/empty responses pass through
-    untouched.
-
-    A textual body whose content type the caller *asked for* via ``Accept`` (see
-    :func:`_request_accepts`) is not a corruption signal and passes through. To
-    let a new binary endpoint return text, advertise that type in its ``Accept``
-    header rather than special-casing it here. Opaque downloads that are not a
-    Venice API surface (presigned object-store URLs) skip this guard entirely —
-    see ``_request_bytes(..., guard_content_type=False)``.
-    """
-    main_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-    if not main_type:
-        return
-    if _request_accepts(response.request, main_type):
-        return
-    if main_type == "application/json":
-        try:
-            parsed: Any = response.json()
-        except (json.JSONDecodeError, ValueError):
-            parsed = response.text
-        raise VeniceUnexpectedContentTypeError(
-            "Expected binary media but Venice returned a JSON body "
-            f"(Content-Type: {main_type!r}). For VPS-backed video models the "
-            "media lives at the response's download_url; call video.download(...) "
-            "instead of retrieve_binary(...).",
-            status_code=response.status_code,
-            error_body=parsed if isinstance(parsed, dict) else str(parsed),
-            content_type=main_type,
-            request=response.request,
-            response=response,
-        )
-    if _is_textual_content_type(main_type):
-        raise VeniceUnexpectedContentTypeError(
-            "Expected binary media but the response carried a textual body "
-            f"(Content-Type: {main_type!r}). This is typically a CDN error page, "
-            "an auth-proxy interstitial, or a presigned-URL error returned with a "
-            "2xx status — not media bytes.",
-            status_code=response.status_code,
-            error_body=response.text,
-            content_type=main_type,
-            request=response.request,
-            response=response,
-        )
 
 
 def _build_headers(
@@ -263,7 +174,7 @@ class AsyncVeniceClient(_BaseClient):
             data=data,
             no_auth=no_auth,
         )
-        parsed = response.json()
+        parsed = _parse_json_body(response, path)
         if not isinstance(parsed, dict):
             raise TypeError(
                 f"Expected JSON object from {path}, got {type(parsed).__name__}. "
@@ -289,7 +200,7 @@ class AsyncVeniceClient(_BaseClient):
             headers=headers,
             no_auth=no_auth,
         )
-        return response.json()
+        return _parse_json_body(response, path)
 
     async def _request_bytes(
         self,
@@ -477,7 +388,7 @@ class VeniceClient(_BaseClient):
             data=data,
             no_auth=no_auth,
         )
-        parsed = response.json()
+        parsed = _parse_json_body(response, path)
         if not isinstance(parsed, dict):
             raise TypeError(
                 f"Expected JSON object from {path}, got {type(parsed).__name__}. "
@@ -503,7 +414,7 @@ class VeniceClient(_BaseClient):
             headers=headers,
             no_auth=no_auth,
         )
-        return response.json()
+        return _parse_json_body(response, path)
 
     def _request_bytes(
         self,

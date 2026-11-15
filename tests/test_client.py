@@ -10,6 +10,7 @@ from veniceresch import (
     VeniceAPIError,
     VeniceAuthError,
     VeniceClient,
+    VeniceUnexpectedContentTypeError,
 )
 from veniceresch._client import DEFAULT_BASE_URL
 
@@ -187,6 +188,115 @@ async def test_request_any_returns_raw_json(mock_api, async_client):
     mock_api.get("/models/traits").respond(200, json=["trait1", "trait2"])
     result = await async_client._request_any("GET", "/models/traits")
     assert result == ["trait1", "trait2"]
+
+
+# ---- undecodable 2xx bodies on JSON helpers (GH #10) ----------------------
+
+# An ISO-BMFF header: 4-byte box size, then "ftyp". json.detect_encoding sniffs
+# the leading NULs as UTF-32, so the bare response.json() leaked a cryptic
+# UnicodeDecodeError instead of a VeniceError.
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+def _mp4(box_size: int = 0x18) -> bytes:
+    return bytes([0, 0, 0, box_size]) + b"ftypmp42" + b"\x00" * 64
+
+
+async def _call(client, helper: str, path: str):
+    method = getattr(client, helper)
+    result = method("GET", path)
+    if isinstance(client, AsyncVeniceClient):
+        result = await result
+    return result
+
+
+@pytest.fixture(params=["async", "sync"])
+def any_client(request, async_client, sync_client):
+    return async_client if request.param == "async" else sync_client
+
+
+@pytest.mark.parametrize("helper", ["_request_json", "_request_any"])
+@pytest.mark.parametrize("box_size", [0x18, 0x1C, 0x20, 0x24])
+async def test_json_helpers_raise_typed_error_on_mp4_labeled_json(
+    mock_api, any_client, helper, box_size
+):
+    # The issue's exact repro: MP4 bytes mislabeled as application/json.
+    body = _mp4(box_size)
+    mock_api.get("/thing").respond(200, content=body, headers={"content-type": "application/json"})
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await _call(any_client, helper, "/thing")
+    exc = info.value
+    assert exc.status_code == 200
+    assert exc.content_type == "application/json"
+    assert exc.response is not None and exc.response.content == body
+    assert exc.error_body == f"<{len(body)} bytes of application/json>"
+    assert isinstance(exc.__cause__, ValueError)
+    assert "/thing" in str(exc)
+    assert "video.download" in str(exc)
+
+
+@pytest.mark.parametrize("helper", ["_request_json", "_request_any"])
+@pytest.mark.parametrize(
+    ("body", "content_type"),
+    [(_mp4(), "video/mp4"), (_PNG, "image/png"), (_PNG, "application/octet-stream")],
+)
+async def test_json_helpers_raise_typed_error_on_binary(
+    mock_api, any_client, helper, body, content_type
+):
+    mock_api.get("/thing").respond(200, content=body, headers={"content-type": content_type})
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await _call(any_client, helper, "/thing")
+    exc = info.value
+    assert exc.content_type == content_type
+    assert exc.response.content == body
+    assert exc.error_body == f"<{len(body)} bytes of {content_type}>"
+
+
+@pytest.mark.parametrize("helper", ["_request_json", "_request_any"])
+async def test_json_helpers_raise_typed_error_on_html(mock_api, any_client, helper):
+    page = "<html><body>502 Bad Gateway</body></html>"
+    mock_api.get("/thing").respond(
+        200, content=page.encode(), headers={"content-type": "text/html; charset=utf-8"}
+    )
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await _call(any_client, helper, "/thing")
+    assert info.value.content_type == "text/html"
+    assert info.value.error_body == page
+    assert "video.download" not in str(info.value)
+
+
+async def test_json_helper_truncates_long_text_body(mock_api, async_client):
+    page = "x" * 10_000
+    mock_api.get("/thing").respond(200, text=page, headers={"content-type": "text/html"})
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await async_client._request_json("GET", "/thing")
+    body = info.value.error_body
+    assert isinstance(body, str)
+    assert body.startswith("x" * 2048)
+    assert body.endswith("[truncated, 10000 bytes total]")
+    assert info.value.response.content == page.encode()
+
+
+@pytest.mark.parametrize("helper", ["_request_json", "_request_any"])
+async def test_json_helpers_raise_typed_error_on_empty_body(mock_api, any_client, helper):
+    mock_api.get("/thing").respond(200, content=b"", headers={"content-type": "application/json"})
+    with pytest.raises(VeniceUnexpectedContentTypeError) as info:
+        await _call(any_client, helper, "/thing")
+    assert info.value.error_body == "<empty body>"
+
+
+@pytest.mark.parametrize("content_type", ["application/json", "text/plain", None])
+async def test_json_helpers_still_parse_valid_json_under_any_content_type(
+    mock_api, any_client, content_type
+):
+    # Detection is by parse failure, not by Content-Type: valid JSON with an
+    # odd or missing label must keep working.
+    route = mock_api.get("/thing").respond(200, content=b'{"ok": true}')
+    route.return_value.headers.pop("content-type", None)
+    if content_type is not None:
+        route.return_value.headers["content-type"] = content_type
+    assert await _call(any_client, "_request_json", "/thing") == {"ok": True}
+    assert await _call(any_client, "_request_any", "/thing") == {"ok": True}
 
 
 # ---- non-API errors still bubble up --------------------------------------

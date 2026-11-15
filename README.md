@@ -194,6 +194,12 @@ non-PROCESSING status (so unknown terminal statuses are tolerated). Pass
 `VeniceAudioFailedError` on a known failure status (`FAILED`, `CANCELLED`,
 `ERROR`); the final response is on the error's `.result`.
 
+Direct-bytes video models answer `/video/retrieve` with the finished MP4
+itself once the job completes, not a JSON status. For those,
+`retrieve()` / `wait_for_completion()` raise `VeniceUnexpectedContentTypeError`
+at completion. The bytes are on `exc.response.content`, or call
+`video.download(...)`, which handles both model families.
+
 Queue / retrieve / quote / complete all return typed
 Pydantic models (`VideoQueueResponse`, `VideoRetrieveResponse`, etc.).
 Attribute access everywhere — ``queued.queue_id`` and
@@ -510,6 +516,7 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 | `VeniceRateLimitError` | 429 |
 | `VeniceServerError` | 5xx |
 | `VeniceContentViolationError` | body contained `suggested_prompt` (any status); image rejections may also set `recommended_model` and `retryable` |
+| `VeniceUnexpectedContentTypeError` | 2xx body doesn't match the request: a JSON call got binary/HTML/empty (raw bytes on `exc.response.content`), or a binary call got JSON/text |
 | `VeniceConnectionError` | DNS / TLS / connection reset / proxy failure |
 | `VeniceTimeoutError` | request or response timed out |
 
