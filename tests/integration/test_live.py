@@ -117,14 +117,24 @@ async def test_chat_completion_minimal(api_key: str) -> None:
         models = await client.models.list(type="text")
         if not models.data:
             pytest.skip("No text models available on this account.")
-        model_id = models.data[0]["id"]
+        # Prefer a non-reasoning model: a reasoning model can spend the whole
+        # tiny max_tokens budget on reasoning_content and return content=None.
+        plain = [
+            m
+            for m in models.data
+            if not (_spec(m).get("capabilities") or {}).get("supportsReasoning")
+        ]
+        model_id = (plain or models.data)[0]["id"]
         result = await client.chat.create(
             model=model_id,
             messages=[{"role": "user", "content": "Say 'pong' and nothing else."}],
             max_tokens=10,
         )
         assert isinstance(result, ChatCompletionResponse)
-        assert result.choices and result.choices[0]["message"]["content"]
+        assert result.choices
+        message = result.choices[0]["message"]
+        # Fallback model may be a reasoner: any generated text proves the round trip.
+        assert message.get("content") or message.get("reasoning_content"), message
 
 
 async def test_image_styles(api_key: str) -> None:
