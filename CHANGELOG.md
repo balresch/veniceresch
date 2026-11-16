@@ -3,10 +3,10 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.10.0] — 2026-11-16
 
-Synced to Venice API spec `20261113` (was `20261108`). All changes upstream are
-additive; every operation stays covered.
+Synced to Venice API spec `20261113` (was `20261108`): video draft mode, plus
+helpers for caller-owned retries. Additive: no renames or removals.
 
 ### Added
 
