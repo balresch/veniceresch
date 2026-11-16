@@ -26,6 +26,7 @@ from __future__ import annotations
 import os
 import struct
 import zlib
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -37,6 +38,7 @@ from veniceresch.types import (
     BillingUsageHistoryResponse,
     ChatCompletionResponse,
     DecisionResponse,
+    GenerateImageResponse,
     ImageBytes,
     ImageStylesResponse,
     ModelList,
@@ -338,7 +340,7 @@ def _solid_png(size: int = 256, rgb: tuple[int, int, int] = (200, 40, 40)) -> by
     )
 
 
-async def test_image_edit_header_metadata(paid: str) -> None:
+async def test_image_edit_header_metadata(paid: str, tmp_path: Path) -> None:
     """One /image/edit call with the default model: named fields reach the wire
     and the x-venice-* headers land on ImageBytes.metadata (GH #12 / #13).
 
@@ -359,6 +361,48 @@ async def test_image_edit_header_metadata(paid: str) -> None:
     print(f"edit metadata: {meta!r}")  # visible with -rA / on failure: records the live header set
     assert meta.content_type and meta.content_type.startswith("image/")
     assert meta.is_blurred is not None, f"no x-venice-is-blurred header; got {meta.headers}"
+    saved = result.save(tmp_path / "edit.png")
+    assert saved.read_bytes() == bytes(result)
+
+
+def _flat_image_price(model: dict[str, Any]) -> float:
+    """``pricing.generation.usd`` for flat-priced image models; inf otherwise."""
+    pricing = _spec(model).get("pricing") or {}
+    usd = (pricing.get("generation") or {}).get("usd") if isinstance(pricing, dict) else None
+    return float(usd) if isinstance(usd, (int, float)) else float("inf")
+
+
+async def test_image_generate_save_all(paid: str, tmp_path: Path) -> None:
+    """Real base64 payloads from /image/generate decode and get a real image
+    extension from their magic bytes (BACKLOG #24), for every requested format.
+
+    Uses the cheapest flat-priced image model at a small size. Billed: one
+    image per format (3).
+    """
+    async with AsyncVeniceClient(api_key=paid) as client:
+        models = await client.models.list(type="image")
+        priced = sorted(models.data, key=_flat_image_price)
+        if not priced or _flat_image_price(priced[0]) == float("inf"):
+            pytest.skip("No flat-priced image model listed on this account.")
+        model = priced[0]["id"]
+        for fmt, ext in (("png", "png"), ("jpeg", "jpg"), ("webp", "webp")):
+            result = await client.image.generate(
+                model=model,
+                prompt="A plain red square.",
+                width=512,
+                height=512,
+                format=fmt,
+                safe_mode=True,
+            )
+            assert isinstance(result, GenerateImageResponse)
+            paths = result.save_all(tmp_path / fmt, prefix="live")
+            print(f"{model} {fmt}: {[p.name for p in paths]}")
+            assert paths, "generate returned no images"
+            for path in paths:
+                # Magic-byte detection, not the request-format fallback: a
+                # ".bin" or wrong suffix means Venice sent a format we don't sniff.
+                assert path.suffix == f".{ext}", path
+                assert path.stat().st_size > 100
 
 
 async def test_audio_queue_direct_bytes_completion(paid: str) -> None:

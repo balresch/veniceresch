@@ -312,6 +312,9 @@ def _image_extension(data: bytes, fallback: str | None = None) -> str:
 
     Falls back to ``fallback`` (a requested format such as ``"jpeg"``), then to
     ``"bin"`` so an unrecognized payload is never saved under a wrong name.
+    ``fallback`` is used only if it is plain ASCII letters/digits: it is echoed
+    back by the server and ends up in a file name, so anything with a path
+    separator or dot is ignored.
     """
     if data.startswith(b"\x89PNG\r\n\x1a\n"):
         return "png"
@@ -319,8 +322,9 @@ def _image_extension(data: bytes, fallback: str | None = None) -> str:
         return "jpg"
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "webp"
-    if fallback:
-        return "jpg" if fallback.lower() == "jpeg" else fallback.lower()
+    if fallback and fallback.isascii() and fallback.isalnum():
+        ext = fallback.lower()
+        return "jpg" if ext == "jpeg" else ext
     return "bin"
 
 

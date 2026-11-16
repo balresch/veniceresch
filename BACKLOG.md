@@ -1052,7 +1052,7 @@ raw chunk iterator as the primary API.
 
 ## 24. Save helpers for images  — DONE
 
-**Done (2026-11-16).** `ImageBytes.save(path) -> Path` and `GenerateImageResponse.save_all(directory, prefix="image") -> list[Path]` in `types.py`. Extension from magic bytes (png/jpg/webp), then the echoed `request["format"]` (jpeg → jpg), then `bin`; tolerates a `data:` URL prefix. `OpenAIImageResponse` has no save helper (its `b64_json` / `url` entries are a different shape; add one if asked).
+**Done (2026-11-16).** `ImageBytes.save(path) -> Path` and `GenerateImageResponse.save_all(directory, prefix="image") -> list[Path]` in `types.py`. Extension from magic bytes (png/jpg/webp), then the echoed `request["format"]` (jpeg → jpg; ignored unless ASCII alnum, since it becomes part of a file name), then `bin`; tolerates a `data:` URL prefix. `OpenAIImageResponse` has no save helper (its `b64_json` / `url` entries are a different shape; add one if asked).
 
 **Priority: low, trivial. Gap vs venice-py (`response.save()`).**
 
