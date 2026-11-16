@@ -1034,7 +1034,9 @@ private modules; no retry happens inside the SDK.
 
 ---
 
-## 23. Streaming text helper  — TODO
+## 23. Streaming text helper  — DONE
+
+**Done (2026-11-16).** `veniceresch.text_deltas(stream)` in `_streaming.py`: one overloaded function for async and sync streams (dispatch on `AsyncIterable`), first choice only, closes the source stream when closed, helpful `TypeError` for an un-awaited coroutine. Chat only: `/responses` stream events have no spec'd schema and no live-verified delta shape yet. Free-tier live check `test_chat_stream_text_deltas`.
 
 **Priority: medium, small. Gap vs venice-py (`stream.text_deltas()`).**
 
@@ -1048,7 +1050,9 @@ raw chunk iterator as the primary API.
 
 ---
 
-## 24. Save helpers for images  — TODO
+## 24. Save helpers for images  — DONE
+
+**Done (2026-11-16).** `ImageBytes.save(path) -> Path` and `GenerateImageResponse.save_all(directory, prefix="image") -> list[Path]` in `types.py`. Extension from magic bytes (png/jpg/webp), then the echoed `request["format"]` (jpeg → jpg), then `bin`; tolerates a `data:` URL prefix. `OpenAIImageResponse` has no save helper (its `b64_json` / `url` entries are a different shape; add one if asked).
 
 **Priority: low, trivial. Gap vs venice-py (`response.save()`).**
 
@@ -1094,7 +1098,9 @@ cheap) so they can't rot.
 
 ---
 
-## 27. Say what veniceresch is for  — TODO (README part needs no one; showcase part needs the user)
+## 27. Say what veniceresch is for  — IN PROGRESS (README done 2026-11-16; showcase PR needs the user's OK)
+
+**README part done (2026-11-16):** "Is it the right SDK for you?" under "Why this exists". Still open: the `veniceai/builtinvenice` showcase PR.
 
 **Priority: medium, trivial.**
 

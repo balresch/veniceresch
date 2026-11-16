@@ -3,6 +3,35 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **`veniceresch.text_deltas(stream)`** (BACKLOG #23): yields just the text
+  from a chat-completion stream, for both the async iterator
+  (`async for text in text_deltas(await client.chat.stream(...))`) and the sync
+  one. It follows the first choice and skips chunks without text content (role
+  openers, tool-call deltas, `reasoning_content`, the usage chunk with empty
+  `choices`, `null` / empty `content`). Closing it closes the underlying
+  stream. Passing the un-awaited coroutine raises a `TypeError` that says to
+  `await` it. The raw `ChatCompletionChunk` iterator is unchanged.
+- **Image save helpers** (BACKLOG #24): `ImageBytes.save(path)` writes the
+  bytes and returns the `Path`. `GenerateImageResponse.save_all(directory,
+  prefix="image")` decodes every base64 image to `{prefix}-{i}.{ext}`, with
+  the extension taken from the magic bytes (png / jpg / webp), else the
+  request's `format`, else `bin`. It creates the directory if needed. Both are
+  blocking; async callers can use `asyncio.to_thread`.
+
+### Documentation
+
+- README: a "Is it the right SDK for you?" section saying what veniceresch is
+  for and when to pick venice-py instead (BACKLOG #27).
+
+### Development
+
+- New free-tier live check `test_chat_stream_text_deltas`: the first
+  integration test that exercises real chat SSE framing.
+
 ## [0.10.0] — 2026-11-16
 
 Synced to Venice API spec `20261113` (was `20261108`): video draft mode, plus

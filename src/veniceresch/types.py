@@ -19,6 +19,9 @@ fields to responses frequently; new fields won't raise
 
 from __future__ import annotations
 
+import base64
+import os
+from pathlib import Path
 from typing import Annotated, Any
 
 from pydantic import Field, PrivateAttr, ValidationError
@@ -304,6 +307,30 @@ class ImageResponseMetadata(VeniceBaseModel):
     """Every ``x-venice-*`` header (plus ``x-balance-remaining``), raw, lower-cased names."""
 
 
+def _image_extension(data: bytes, fallback: str | None = None) -> str:
+    """File extension (no dot) for image bytes, from their magic number.
+
+    Falls back to ``fallback`` (a requested format such as ``"jpeg"``), then to
+    ``"bin"`` so an unrecognized payload is never saved under a wrong name.
+    """
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if fallback:
+        return "jpg" if fallback.lower() == "jpeg" else fallback.lower()
+    return "bin"
+
+
+def _decode_image_b64(value: str) -> bytes:
+    # Tolerate a ``data:image/...;base64,`` prefix in case Venice ever sends one.
+    if value.startswith("data:"):
+        value = value.split(",", 1)[1]
+    return base64.b64decode(value)
+
+
 class ImageBytes(bytes):
     """Image bytes from a binary ``/image/*`` method, plus header metadata.
 
@@ -327,6 +354,16 @@ class ImageBytes(bytes):
         obj = super().__new__(cls, data)
         obj.metadata = metadata if metadata is not None else ImageResponseMetadata()
         return obj
+
+    def save(self, path: str | os.PathLike[str]) -> Path:
+        """Write the image to ``path`` (as given, overwriting) and return it as a :class:`Path`.
+
+        Blocking file I/O: async callers can use
+        ``await asyncio.to_thread(img.save, path)``.
+        """
+        out = Path(path)
+        out.write_bytes(self)
+        return out
 
 
 class GenerateImageResponse(VeniceBaseModel):
@@ -353,6 +390,29 @@ class GenerateImageResponse(VeniceBaseModel):
     def metadata(self) -> ImageResponseMetadata:
         """Venice's response-header data for this call (see :class:`ImageResponseMetadata`)."""
         return self._metadata
+
+    def save_all(self, directory: str | os.PathLike[str], prefix: str = "image") -> list[Path]:
+        """Decode every base64 entry in :attr:`images` and write it to ``directory``.
+
+        Files are named ``{prefix}-{i}.{ext}`` (``i`` from 0, existing files
+        overwritten). ``ext`` comes from the image's magic bytes (png / jpg /
+        webp), else the request's ``format``, else ``bin``. ``directory`` is
+        created if missing. Returns the written paths in :attr:`images` order.
+
+        Blocking file I/O: async callers can use
+        ``await asyncio.to_thread(result.save_all, directory)``.
+        """
+        out_dir = Path(directory)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        requested = (self.request or {}).get("format")
+        fallback = requested if isinstance(requested, str) else None
+        paths: list[Path] = []
+        for i, encoded in enumerate(self.images):
+            data = _decode_image_b64(encoded)
+            path = out_dir / f"{prefix}-{i}.{_image_extension(data, fallback)}"
+            path.write_bytes(data)
+            paths.append(path)
+        return paths
 
 
 class OpenAIImageResponse(VeniceBaseModel):
