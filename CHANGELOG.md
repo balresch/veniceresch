@@ -24,6 +24,16 @@ additive; every operation stays covered.
   `model_spec.supports_reference_audios` / `max_reference_audios` and
   `VideoModelConstraints.per_reference_audio`.
 
+- **Helpers for caller-owned retries** (BACKLOG #22). The SDK still never
+  retries, but now gives you what a retry policy needs:
+  `veniceresch.is_retryable(exc)` (True for transport failures, 408, 429, 5xx,
+  and content violations marked `retryable: true`; False for everything else,
+  including `wait_for_completion` deadlines and failed jobs), and on every
+  `VeniceAPIError`: `retry_after` (seconds from the `Retry-After` header,
+  delta-seconds or HTTP date) and `rate_limit_headers` (raw `x-ratelimit-*` /
+  `ratelimit-*` headers). The README has a dependency-free loop and a
+  `tenacity` recipe.
+
 ### Changed
 
 - `image.edit()` / `image.multi_edit()`: `aspect_ratio` is no longer an enum
