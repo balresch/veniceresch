@@ -22,6 +22,7 @@ from veniceresch._errors import (
     VeniceX402PaymentRequiredError,
     is_retryable,
 )
+from veniceresch._streaming import text_deltas
 from veniceresch._version import __version__
 from veniceresch.pagination import AsyncPaginator, Paginator
 from veniceresch.resources._polling import VeniceJobFailedError
@@ -58,4 +59,5 @@ __all__ = [
     "VeniceX402PaymentRequiredError",
     "__version__",
     "is_retryable",
+    "text_deltas",
 ]

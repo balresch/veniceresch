@@ -542,3 +542,58 @@ def test_image_bytes_constructs_and_pickles():
         assert clone == b"abc" and clone.metadata.is_blurred is True
     # New bytes built from it are plain bytes (documented).
     assert type(img[:1]) is bytes
+
+
+# ---- BACKLOG #24: save helpers ---------------------------------------------
+
+JPEG_BYTES = b"\xff\xd8\xff\xe0fake-jpeg"
+WEBP_BYTES = b"RIFF\x10\x00\x00\x00WEBPVP8 fake"
+
+
+async def test_image_bytes_save_writes_and_returns_path(mock_api, async_client, tmp_path):
+    mock_api.post("/image/edit").respond(
+        200, content=SAMPLE_BYTES, headers={"content-type": "image/png"}
+    )
+    img = await async_client.image.edit(image=SAMPLE_BYTES, prompt="p")
+    target = tmp_path / "out.png"
+    target.write_bytes(b"old")  # overwritten
+    result = img.save(str(target))
+    assert result == target and isinstance(result, Path)
+    assert target.read_bytes() == SAMPLE_BYTES
+
+
+async def test_generate_save_all_names_files_by_magic_bytes(mock_api, async_client, tmp_path):
+    images = [SAMPLE_BYTES, JPEG_BYTES, WEBP_BYTES]
+    mock_api.post("/image/generate").respond(
+        200, json={"id": "gen-1", "images": [base64.b64encode(b).decode() for b in images]}
+    )
+    result = await async_client.image.generate(model="m", prompt="p", variants=3)
+    out_dir = tmp_path / "nested" / "dir"  # created on demand
+    paths = result.save_all(out_dir)
+    assert [p.name for p in paths] == ["image-0.png", "image-1.jpg", "image-2.webp"]
+    assert [p.read_bytes() for p in paths] == images
+
+
+def test_generate_save_all_extension_fallbacks(tmp_path):
+    from veniceresch.types import GenerateImageResponse
+
+    unknown = base64.b64encode(b"not-an-image").decode()
+    # Unrecognized bytes: the request's format, with jpeg → jpg.
+    r = GenerateImageResponse(images=[unknown], request={"format": "jpeg"})
+    assert [p.name for p in r.save_all(tmp_path, prefix="cat")] == ["cat-0.jpg"]
+    # No request format either: .bin rather than a wrong extension.
+    r = GenerateImageResponse(images=[unknown])
+    assert [p.name for p in r.save_all(tmp_path)] == ["image-0.bin"]
+    # A data: URL prefix is tolerated; magic bytes beat the request's format.
+    r = GenerateImageResponse(
+        images=[f"data:image/png;base64,{SAMPLE_B64}"], request={"format": "webp"}
+    )
+    (path,) = r.save_all(tmp_path, prefix="d")
+    assert path.name == "d-0.png" and path.read_bytes() == SAMPLE_BYTES
+    assert GenerateImageResponse().save_all(tmp_path / "empty") == []
+
+
+def test_sync_generate_binary_save(mock_api, sync_client, tmp_path):
+    mock_api.post("/image/generate").respond(200, content=SAMPLE_BYTES)
+    path = sync_client.image.generate_binary(model="m", prompt="p").save(tmp_path / "x.png")
+    assert path.read_bytes() == SAMPLE_BYTES

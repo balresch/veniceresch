@@ -30,7 +30,7 @@ from typing import Any
 
 import pytest
 
-from veniceresch import AsyncVeniceClient, VeniceGoneError
+from veniceresch import AsyncVeniceClient, VeniceGoneError, text_deltas
 from veniceresch.types import (
     BillingBalanceResponse,
     BillingUsageHistoryCsvPage,
@@ -135,6 +135,29 @@ async def test_chat_completion_minimal(api_key: str) -> None:
         message = result.choices[0]["message"]
         # Fallback model may be a reasoner: any generated text proves the round trip.
         assert message.get("content") or message.get("reasoning_content"), message
+
+
+async def test_chat_stream_text_deltas(api_key: str) -> None:
+    # Real SSE framing through text_deltas: role opener, content deltas,
+    # finish/usage chunks must all be filtered down to the text.
+    async with AsyncVeniceClient(api_key=api_key) as client:
+        models = await client.models.list(type="text")
+        plain = [
+            m
+            for m in models.data
+            if not (_spec(m).get("capabilities") or {}).get("supportsReasoning")
+        ]
+        if not plain:
+            pytest.skip("No non-reasoning text model to stream from.")
+        stream = await client.chat.stream(
+            model=plain[0]["id"],
+            messages=[{"role": "user", "content": "Count from 1 to 5, digits only."}],
+            max_tokens=30,
+        )
+        texts = [t async for t in text_deltas(stream)]
+        assert texts, "stream yielded no text"
+        assert all(isinstance(t, str) and t for t in texts)
+        assert "3" in "".join(texts)
 
 
 async def test_image_styles(api_key: str) -> None:

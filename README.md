@@ -13,6 +13,32 @@ A typed, async-first Python client for the [Venice.ai](https://venice.ai) API.
   (`venice_parameters`, typed errors, binary response handling, video
   polling helper).
 
+### Is it the right SDK for you?
+
+veniceresch is deliberately thin:
+
+- **Spec-generated.** Types come from Venice's own swagger. A weekly CI job
+  flags upstream spec drift, and a test ties every documented endpoint (49 of
+  49) to a client method.
+- **Small footprint.** Native sync *and* async clients on `httpx`, three runtime
+  dependencies (`httpx`, `pydantic`, `typing-extensions`), Python 3.10+.
+- **No hidden behavior.** No retries, rate limiting or background threads.
+  Failures are typed exceptions; `is_retryable(exc)` and `exc.retry_after` give
+  your own retry policy what it needs.
+- **Wire details handled.** Typed errors when a body isn't what the endpoint
+  promised, job `retrieve` calls that cope with models answering with the
+  finished file, image response-header metadata (`is_blurred`, the enhanced
+  prompt, remaining balance). Checked by a live integration suite.
+
+Pick it when you embed Venice in a service that already has its own retry,
+logging and concurrency policy, or when you want types that track the spec
+closely.
+
+Pick [venice-py](https://github.com/sethbang/venice-py) instead if you want
+batteries included: a CLI, built-in retries and rate limiting, x402 wallet
+signing (EVM / Solana), TEE / end-to-end encryption, or a large set of
+examples.
+
 ### What "typed" means here
 
 You get **typed resource methods** (autocompleted kwargs, typed return
@@ -98,12 +124,30 @@ stream = await client.chat.completions.create(
     stream=True,
 )
 async for event in stream:
-    delta = event.choices[0]["delta"].get("content", "")
-    print(delta, end="", flush=True)
+    print(event.id, event.choices)  # ChatCompletionChunk: OpenAI-shaped deltas
 ```
 
 `client.chat.stream(...)` is an explicit alias; it uses the same
 await-then-iterate contract.
+
+When you only want the text, wrap the stream in `text_deltas()`. It yields the
+first choice's non-empty `delta.content` strings and skips everything else
+(role openers, tool-call deltas, `reasoning_content`, the final usage chunk
+with empty `choices`). The same function works on the sync client's iterator:
+
+```python
+from veniceresch import text_deltas
+
+stream = await client.chat.stream(model="llama-3.3-70b", messages=[...])
+async for text in text_deltas(stream):
+    print(text, end="", flush=True)
+
+for text in text_deltas(sync_client.chat.stream(model="llama-3.3-70b", messages=[...])):
+    print(text, end="", flush=True)
+```
+
+Closing the `text_deltas()` iterator (e.g. `contextlib.aclosing` around an
+early `break`) also closes the underlying stream and its HTTP connection.
 
 `/responses` is its **own** Venice API (not an OpenAI-compatibility alias
 for chat), but it streams through the same await-then-iterate contract:
@@ -166,7 +210,7 @@ writes to disk and compares like bytes, with Venice's response headers on
 
 ```python
 edited = await client.image.edit(image=src, prompt="...", enhance_prompt=True)
-Path("out.png").write_bytes(edited)
+edited.save("out.png")  # or Path("out.png").write_bytes(edited)
 edited.metadata.is_blurred  # x-venice-is-blurred → bool | None
 edited.metadata.enhanced_prompt  # x-venice-enhanced-prompt, URL-decoded
 edited.metadata.headers  # every x-venice-* header, raw
@@ -174,6 +218,18 @@ edited.metadata.headers  # every x-venice-* header, raw
 
 Fields are `None` when Venice didn't send the header. Slicing or
 concatenating returns plain `bytes` without the metadata.
+
+To write `image.generate()`'s base64 images to disk, use `save_all()`. It names
+the files `{prefix}-{i}.{ext}`, takes the extension from the image bytes
+(png / jpg / webp), and creates the directory if needed:
+
+```python
+result = await client.image.generate(model="flux-dev", prompt="a red cube", variants=2)
+paths = result.save_all("out/", prefix="cube")  # [out/cube-0.png, out/cube-1.png]
+```
+
+Both helpers do blocking file I/O; in async code, wrap them with
+`await asyncio.to_thread(result.save_all, "out/")` if that matters.
 
 ### OpenAI-compatible image alias
 
