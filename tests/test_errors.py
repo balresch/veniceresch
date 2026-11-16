@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import httpx
 import pytest
 
+import veniceresch
 from veniceresch import (
     VeniceAPIError,
     VeniceAuthError,
@@ -21,7 +24,8 @@ from veniceresch import (
     VeniceValidationError,
     VeniceX402PaymentRequiredError,
 )
-from veniceresch._errors import raise_for_response
+from veniceresch._errors import _parse_retry_after, raise_for_response
+from veniceresch.resources._polling import VeniceJobFailedError
 
 
 def test_2xx_response_is_noop(make_response):
@@ -232,3 +236,102 @@ def test_content_violation_new_fields_default_to_none(make_response):
         raise_for_response(make_response.json(400, {"error": "x", "suggested_prompt": "y"}))
     assert info.value.recommended_model is None
     assert info.value.retryable is None
+
+
+# ---- caller-owned retry helpers (BACKLOG #22) -----------------------------
+
+
+_NOW = datetime(2026, 11, 16, 12, 0, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("120", 120.0),
+        ("0", 0.0),
+        (" 1.5 ", 1.5),
+        ("Mon, 16 Nov 2026 12:00:30 GMT", 30.0),  # HTTP date, 30s from _NOW
+        ("Mon, 16 Nov 2026 11:59:00 GMT", 0.0),  # already past -> 0
+        ("-5", None),
+        ("nan", None),
+        ("soon", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_parse_retry_after(value, expected):
+    assert _parse_retry_after(value, now=_NOW) == expected
+
+
+async def test_rate_limit_error_carries_retry_after_and_headers(mock_api, async_client):
+    mock_api.get("/models").respond(
+        429,
+        json={"error": "slow down"},
+        headers={
+            "Retry-After": "7",
+            "x-ratelimit-remaining-requests": "0",
+            "x-ratelimit-reset-requests": "7s",
+            "RateLimit-Policy": "100;w=60",
+            "x-unrelated": "no",
+        },
+    )
+    with pytest.raises(veniceresch.VeniceRateLimitError) as info:
+        await async_client.models.list()
+    exc = info.value
+    assert exc.retry_after == 7.0
+    assert exc.rate_limit_headers == {
+        "x-ratelimit-remaining-requests": "0",
+        "x-ratelimit-reset-requests": "7s",
+        "ratelimit-policy": "100;w=60",
+    }
+    assert veniceresch.is_retryable(exc)
+
+
+def test_server_error_retry_after_and_absent_headers(mock_api, sync_client):
+    mock_api.get("/models").respond(503, text="busy", headers={"Retry-After": "2"})
+    with pytest.raises(veniceresch.VeniceServerError) as info:
+        sync_client.models.list()
+    assert info.value.retry_after == 2.0
+    assert info.value.rate_limit_headers == {}
+
+
+def test_error_without_response_has_empty_retry_fields():
+    exc = veniceresch.VeniceAPIError("x", status_code=500, error_body={})
+    assert exc.retry_after is None and exc.rate_limit_headers == {}
+
+
+def _api(cls, status, **kw):
+    return cls("x", status_code=status, error_body={}, **kw)
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected"),
+    [
+        (veniceresch.VeniceConnectionError("reset"), True),
+        (veniceresch.VeniceTimeoutError("read timed out"), True),
+        (_api(veniceresch.VeniceRateLimitError, 429), True),
+        (_api(veniceresch.VeniceServerError, 500), True),
+        (_api(veniceresch.VeniceServerError, 503), True),
+        (_api(veniceresch.VeniceAPIError, 408), True),
+        (_api(veniceresch.VeniceAPIError, 418), False),
+        (_api(veniceresch.VeniceAuthError, 401), False),
+        (_api(veniceresch.VeniceInsufficientBalanceError, 402), False),
+        (_api(veniceresch.VenicePermissionError, 403), False),
+        (_api(veniceresch.VeniceNotFoundError, 404), False),
+        (_api(veniceresch.VeniceConflictError, 409), False),
+        (_api(veniceresch.VeniceValidationError, 400), False),
+        (_api(veniceresch.VenicePayloadTooLargeError, 413), False),
+        (_api(veniceresch.VeniceContentViolationError, 400, retryable=True), True),
+        (_api(veniceresch.VeniceContentViolationError, 400, retryable=False), False),
+        (_api(veniceresch.VeniceContentViolationError, 400), False),
+        (_api(veniceresch.VeniceUnexpectedContentTypeError, 200), False),
+        (veniceresch.VeniceVideoTimeoutError("q1", 60.0), False),
+        (veniceresch.VeniceAudioTimeoutError("q1", 60.0), False),
+        (VeniceJobFailedError("q1", "FAILED", {}, kind="video"), False),
+        (ValueError("not ours"), False),
+        (httpx.ConnectError("raw httpx, never raised by the SDK"), False),
+    ],
+    ids=lambda v: type(v).__name__ if isinstance(v, BaseException) else str(v),
+)
+def test_is_retryable(exc, expected):
+    assert veniceresch.is_retryable(exc) is expected

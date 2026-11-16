@@ -15,6 +15,9 @@ a non-2xx :class:`httpx.Response` into the appropriate subclass.
 from __future__ import annotations
 
 import json
+import math
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -42,6 +45,35 @@ class VeniceTimeoutError(VeniceError):
     """
 
 
+def _parse_retry_after(value: str | None, *, now: datetime | None = None) -> float | None:
+    """Seconds to wait from a ``Retry-After`` header, or ``None``.
+
+    Accepts both RFC 9110 forms: delta-seconds (``"120"``) and an HTTP date
+    (``"Wed, 21 Oct 2026 07:28:00 GMT"``, converted to seconds from ``now``,
+    floored at 0). Anything unparseable or negative gives ``None``.
+    """
+    if value is None or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        seconds = float(text)
+    except ValueError:
+        pass
+    else:
+        return seconds if math.isfinite(seconds) and seconds >= 0 else None
+    try:
+        when = parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    reference = now if now is not None else datetime.now(timezone.utc)
+    return max(0.0, (when - reference).total_seconds())
+
+
+_RATE_LIMIT_PREFIXES = ("x-ratelimit-", "ratelimit-")
+
+
 class VeniceAPIError(VeniceError):
     """A non-2xx response came back from Venice.
 
@@ -51,10 +83,18 @@ class VeniceAPIError(VeniceError):
             raw response text.
         request: The :class:`httpx.Request` that was sent (useful for logging).
         response: The raw :class:`httpx.Response` (also useful for logging).
+        retry_after: Seconds the server asked to wait before retrying, from the
+            ``Retry-After`` header (delta-seconds or HTTP date), else ``None``.
+            Typically set on 429 and 503. The SDK never retries by itself; see
+            :func:`is_retryable`.
+        rate_limit_headers: Any ``x-ratelimit-*`` / ``ratelimit-*`` response
+            headers, raw, with lower-cased names (empty if none were sent).
     """
 
     status_code: int
     error_body: dict[str, Any] | str
+    retry_after: float | None
+    rate_limit_headers: dict[str, str]
 
     def __init__(
         self,
@@ -70,6 +110,17 @@ class VeniceAPIError(VeniceError):
         self.error_body = error_body
         self.request = request
         self.response = response
+        headers = response.headers if response is not None else None
+        self.retry_after = _parse_retry_after(headers.get("retry-after")) if headers else None
+        self.rate_limit_headers = (
+            {
+                name.lower(): value
+                for name, value in headers.items()
+                if name.lower().startswith(_RATE_LIMIT_PREFIXES)
+            }
+            if headers
+            else {}
+        )
 
 
 class VeniceAuthError(VeniceAPIError):
@@ -228,7 +279,11 @@ class VeniceGoneError(VeniceAPIError):
 
 
 class VeniceRateLimitError(VeniceAPIError):
-    """429 — rate-limited. Retry with backoff (this SDK does not retry for you)."""
+    """429 — rate-limited. Retry with backoff; the SDK does not retry for you.
+
+    Wait :attr:`retry_after` seconds when the server sent ``Retry-After``;
+    :func:`is_retryable` returns True for this error.
+    """
 
 
 class VeniceServerError(VeniceAPIError):
@@ -461,6 +516,36 @@ def raise_for_response(response: httpx.Response) -> None:
         exc_cls = VeniceAPIError
 
     raise exc_cls(message, **kwargs)
+
+
+def is_retryable(exc: BaseException) -> bool:
+    """True if repeating the same request might succeed.
+
+    For callers building their own retry policy; the SDK never retries.
+
+    Retryable: transport failures (:class:`VeniceConnectionError`,
+    :class:`VeniceTimeoutError`), HTTP 408, 429 (:class:`VeniceRateLimitError`)
+    and 5xx (:class:`VeniceServerError`), and a
+    :class:`VeniceContentViolationError` whose body says ``retryable: true``.
+    Not retryable: everything else, including auth, balance, validation and
+    not-found errors, ``wait_for_completion`` deadlines
+    (``VeniceVideoTimeoutError`` / ``VeniceAudioTimeoutError``; the job may
+    still be running, so poll again rather than resubmit), failed jobs, and
+    non-Venice exceptions.
+
+    Honor :attr:`VeniceAPIError.retry_after` when it is set. Whether it is safe
+    to repeat a request that isn't idempotent (``video.queue``, ``x402.top_up``,
+    anything billed) is the caller's decision: a 5xx can arrive after the work
+    was accepted.
+    """
+    if isinstance(exc, (VeniceConnectionError, VeniceTimeoutError)):
+        return True
+    if isinstance(exc, VeniceContentViolationError):
+        return exc.retryable is True
+    if isinstance(exc, VeniceAPIError):
+        status = exc.status_code
+        return status in (408, 429) or 500 <= status < 600
+    return False
 
 
 def translate_httpx_error(exc: httpx.HTTPError, context: str) -> VeniceError:

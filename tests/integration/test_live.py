@@ -370,3 +370,22 @@ async def test_audio_queue_direct_bytes_completion(paid: str) -> None:
             assert audio
         else:
             assert len(result.audio) > 100
+
+
+async def test_record_rate_limit_headers(api_key: str) -> None:
+    """Records which rate-limit headers Venice actually sends (BACKLOG #22).
+
+    The spec documents none, so ``VeniceAPIError.rate_limit_headers`` captures
+    any ``x-ratelimit-*`` / ``ratelimit-*`` raw. This free call prints what a
+    normal response carries (visible in the CI log thanks to ``-rP``), so the
+    names can be documented once seen. Asserts nothing about them.
+    """
+    async with AsyncVeniceClient(api_key=api_key) as client:
+        response = await client._send("GET", "/models", json_body=None, params=None, headers=None)
+    assert response.status_code == 200
+    seen = {
+        k: v
+        for k, v in response.headers.items()
+        if "ratelimit" in k.lower() or k.lower() in ("retry-after", "x-balance-remaining")
+    }
+    print(f"rate-limit-ish headers on GET /models: {seen}")

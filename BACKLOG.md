@@ -1008,7 +1008,9 @@ fails the suite.
 
 ---
 
-## 22. Helpers for caller-owned retries  — TODO
+## 22. Helpers for caller-owned retries  — DONE
+
+**Done (2026-11-16).** `VeniceAPIError.retry_after` (from `Retry-After`; delta-seconds or HTTP date, floored at 0, `None` if absent/garbled) and `.rate_limit_headers` (raw `x-ratelimit-*` / `ratelimit-*`), set for every error built with a response. Top-level `veniceresch.is_retryable(exc)`: transport errors, 408, 429, 5xx, content violations with `retryable: true` → True; everything else (incl. the `status_code=0` polling deadline / job-failure errors) → False. README "Retrying" section with a plain loop and a `tenacity` recipe, both executed against respx (429 → 503 → 200; 401 not retried) in a scratch venv on tenacity 9.2.1. Venice's actual rate-limit header names are still unverified live; they're captured raw rather than guessed.
 
 **Priority: high, small. Gap vs venice-py (retries on by default), done the thin way.**
 

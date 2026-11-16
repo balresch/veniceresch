@@ -575,7 +575,7 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 | `VeniceConflictError` | 409 — e.g. `video.complete` before the media is ready |
 | `VeniceGoneError` | 410 — endpoint retired (`sunset`, `deprecation`, `link` from headers) |
 | `VenicePayloadTooLargeError` | 413 — request payload exceeds Venice's size limit |
-| `VeniceRateLimitError` | 429 |
+| `VeniceRateLimitError` | 429; `retry_after` holds the server's `Retry-After` (see [Retrying](#retrying)) |
 | `VeniceServerError` | 5xx |
 | `VeniceContentViolationError` | body contained `suggested_prompt` (any status); image rejections may also set `recommended_model` and `retryable` |
 | `VeniceUnexpectedContentTypeError` | 2xx body doesn't match the request: a JSON call got binary/HTML/empty (raw bytes on `exc.response.content`), or a binary call got JSON/text |
@@ -583,19 +583,7 @@ Every failure raises a subclass of `VeniceError`. HTTP responses map to
 | `VeniceTimeoutError` | request or response timed out |
 
 ```python
-from veniceresch import (
-    VeniceConnectionError,
-    VeniceContentViolationError,
-    VeniceRateLimitError,
-    VeniceServerError,
-    VeniceTimeoutError,
-)
-
-# Retriable failures — no httpx imports needed:
-try:
-    await client.chat.create(model="m", messages=[...])
-except (VeniceRateLimitError, VeniceServerError, VeniceConnectionError, VeniceTimeoutError):
-    ...  # back off and retry
+from veniceresch import VeniceContentViolationError
 
 try:
     await client.image.generate(model="m", prompt="...")
@@ -606,6 +594,72 @@ except VeniceContentViolationError as exc:
 
 `VeniceConnectionError.__cause__` is the underlying `httpx` exception if
 you need to introspect it.
+
+### Retrying
+
+The SDK never retries by itself, so your policy stays yours. Two helpers
+make it easy to write one:
+
+- `veniceresch.is_retryable(exc)` is True for transport failures, 408, 429
+  and 5xx, and for a content violation whose body says `retryable: true`.
+  Everything else is False: auth, balance, validation, not found, failed jobs,
+  and `wait_for_completion` deadlines (the job may still be running, so poll
+  again instead of resubmitting).
+- `exc.retry_after` (on every `VeniceAPIError`) holds the seconds the server
+  asked you to wait, from `Retry-After`, or `None`. Any `x-ratelimit-*` /
+  `ratelimit-*` headers are on `exc.rate_limit_headers`.
+
+A dependency-free loop:
+
+```python
+import asyncio
+import random
+
+from veniceresch import is_retryable
+
+
+async def with_retries(call, *, attempts=5, base=0.5, cap=30.0):
+    for attempt in range(attempts):
+        try:
+            return await call()
+        except Exception as exc:
+            if attempt == attempts - 1 or not is_retryable(exc):
+                raise
+            delay = getattr(exc, "retry_after", None)
+            if delay is None:
+                delay = min(cap, base * 2**attempt) * random.uniform(0.5, 1.0)
+            await asyncio.sleep(delay)
+
+
+models = await with_retries(lambda: client.models.list())
+```
+
+The same with [tenacity](https://tenacity.readthedocs.io/):
+
+```python
+from tenacity import AsyncRetrying, retry_if_exception, stop_after_attempt, wait_exponential_jitter
+
+from veniceresch import is_retryable
+
+_backoff = wait_exponential_jitter(max=30)
+
+
+def _wait(retry_state):
+    delay = getattr(retry_state.outcome.exception(), "retry_after", None)
+    return delay if delay is not None else _backoff(retry_state)
+
+
+retrying = AsyncRetrying(
+    retry=retry_if_exception(is_retryable),
+    wait=_wait,
+    stop=stop_after_attempt(5),
+    reraise=True,
+)
+models = await retrying(client.models.list)
+```
+
+Retrying requests that aren't idempotent (`video.queue`, `x402.top_up`,
+anything billed) is your call: a 5xx can arrive after Venice accepted the work.
 
 ## Sync client
 

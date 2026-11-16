@@ -20,6 +20,7 @@ from veniceresch._errors import (
     VeniceUnexpectedContentTypeError,
     VeniceValidationError,
     VeniceX402PaymentRequiredError,
+    is_retryable,
 )
 from veniceresch._version import __version__
 from veniceresch.pagination import AsyncPaginator, Paginator
@@ -56,4 +57,5 @@ __all__ = [
     "VeniceVideoTimeoutError",
     "VeniceX402PaymentRequiredError",
     "__version__",
+    "is_retryable",
 ]
