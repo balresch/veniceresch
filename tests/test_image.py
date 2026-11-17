@@ -584,6 +584,12 @@ def test_generate_save_all_extension_fallbacks(tmp_path):
     # No request format either: .bin rather than a wrong extension.
     r = GenerateImageResponse(images=[unknown])
     assert [p.name for p in r.save_all(tmp_path)] == ["image-0.bin"]
+    # The echoed format lands in a file name: anything but ASCII alnum is
+    # ignored, so it can't add path segments or a second suffix.
+    for bad in ("../../evil", "png/x", "p.ng", "", "pñg"):
+        r = GenerateImageResponse(images=[unknown], request={"format": bad})
+        (path,) = r.save_all(tmp_path / "bad", prefix="b")
+        assert path == tmp_path / "bad" / "b-0.bin", bad
     # A data: URL prefix is tolerated; magic bytes beat the request's format.
     r = GenerateImageResponse(
         images=[f"data:image/png;base64,{SAMPLE_B64}"], request={"format": "webp"}

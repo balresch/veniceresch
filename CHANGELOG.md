@@ -19,8 +19,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   bytes and returns the `Path`. `GenerateImageResponse.save_all(directory,
   prefix="image")` decodes every base64 image to `{prefix}-{i}.{ext}`, with
   the extension taken from the magic bytes (png / jpg / webp), else the
-  request's `format`, else `bin`. It creates the directory if needed. Both are
-  blocking; async callers can use `asyncio.to_thread`.
+  request's `format` (used only if it is plain letters/digits, since the
+  server echoes it into a file name), else `bin`. It creates the directory if
+  needed. Both are blocking; async callers can use `asyncio.to_thread`.
+
+### Changed
+
+- Synced to Venice API spec `20261116` (was `20261113`). Documentation only:
+  the x402 sign-in 401 on `/x402/balance` and `/x402/transactions` can now
+  also carry `code: "X402_USER_NOT_ALLOWED"` (the wallet's Venice account is
+  banned or deleted). It still raises `VeniceAuthError` with the code on
+  `error_body`. No generated types changed.
 
 ### Documentation
 
@@ -31,6 +40,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 - New free-tier live check `test_chat_stream_text_deltas`: the first
   integration test that exercises real chat SSE framing.
+- New paid live check `test_image_generate_save_all` (one small image per
+  format: png, jpeg, webp) asserts `save_all()` picks the extension from the
+  real payload's magic bytes; the paid image-edit check now also round-trips
+  `ImageBytes.save()`.
 
 ## [0.10.0] — 2026-11-16
 
