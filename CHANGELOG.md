@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-11-24
+
+Synced to Venice API spec `20261123` (was `20261113`): video HDR, plus stream
+and image conveniences (`text_deltas()`, image save helpers). Additive: no
+renames or removals.
+
 ### Added
 
 - **`veniceresch.text_deltas(stream)`** (BACKLOG #23): yields just the text
