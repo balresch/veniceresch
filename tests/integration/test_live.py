@@ -42,6 +42,9 @@ from veniceresch.types import (
     ImageBytes,
     ImageStylesResponse,
     ModelList,
+    VideoModelCapabilities,
+    VideoModelConstraints,
+    VideoModelSettings,
     VoiceChangerQuoteResponse,
 )
 
@@ -106,6 +109,35 @@ async def test_models_list_video(api_key: str) -> None:
     async with AsyncVeniceClient(api_key=api_key) as client:
         result = await client.models.list(type="video")
         assert isinstance(result, ModelList)
+
+
+async def test_video_quote_hdr(api_key: str) -> None:
+    """HDR (spec 20261121): an HDR model's /models entry parses to the public
+    aliases, and /video/quote accepts ``hdr=True`` at an HDR resolution and
+    prices it above SDR. Quotes are free."""
+    async with AsyncVeniceClient(api_key=api_key) as client:
+        models = await client.models.list(type="video")
+        hdr_models = [m for m in models.parsed_data() if m.capabilities is not None]
+        if not hdr_models:
+            pytest.skip("No video model advertises capabilities.supportsHdr.")
+        model = hdr_models[0]
+        print(f"{model.id}: settings={model.settings!r}")
+        assert isinstance(model.capabilities, VideoModelCapabilities)
+        assert isinstance(model.settings, VideoModelSettings)
+        assert model.settings.hdrResolutions
+        assert model.model_spec is not None
+        constraints = model.model_spec.constraints
+        assert isinstance(constraints, VideoModelConstraints)
+        resolution = model.settings.hdrResolutions[0]
+        duration = (constraints.durations or ["5s"])[0]
+        kwargs: dict[str, Any] = {"resolution": resolution}
+        if constraints.aspect_ratios:
+            kwargs["aspect_ratio"] = constraints.aspect_ratios[0]
+        sdr = await client.video.quote(model=model.id, duration=duration, **kwargs)
+        hdr = await client.video.quote(model=model.id, duration=duration, hdr=True, **kwargs)
+        print(f"{model.id} {resolution} {duration}: sdr={sdr.quote} hdr={hdr.quote}")
+        assert hdr.quote is not None and sdr.quote is not None
+        assert hdr.quote >= sdr.quote
 
 
 async def test_billing_balance(admin_key: str) -> None:

@@ -66,10 +66,12 @@ def _fields(model: type) -> set[str]:
                 "audio",
                 "audio_configurable",
                 "durations",
+                "hdrResolutions",
                 "model_type",
                 "per_reference_audio",
                 "prompt_character_limit",
                 "resolutions",
+                "supportsHdr",
                 "topaz",
             },
         ),
@@ -88,7 +90,10 @@ def _fields(model: type) -> set[str]:
                 "supportsTransparentBackground",
             },
         ),
-        ("TextModelPricing", {"cache_input", "cache_write", "extended", "input", "output"}),
+        (
+            "TextModelPricing",
+            {"cache_input", "cache_write", "cache_write_1h", "extended", "input", "output"},
+        ),
         ("ImageModelPricing", {"generation", "quality", "resolutions", "upscale"}),
         ("TtsModelPricing", {"input"}),
         ("AsrModelPricing", {"per_audio_second"}),
@@ -97,6 +102,8 @@ def _fields(model: type) -> set[str]:
         ("DurationTierPricing", {"durations"}),
         ("MusicPerSecondPricing", {"per_second"}),
         ("PerThousandCharactersPricing", {"per_thousand_characters"}),
+        ("VideoModelCapabilities", {"supportsHdr"}),
+        ("VideoModelSettings", {"hdrResolutions"}),
     ],
 )
 def test_alias_points_at_the_right_variant(alias, fields):
@@ -121,6 +128,11 @@ def test_model_spec_and_capabilities_are_what_model_response_uses():
     assert _members(t.ModelResponse.model_fields["model_spec"].annotation) == {t.ModelSpec}
     assert _members(t.ModelSpec.model_fields["capabilities"].annotation) == {t.ModelCapabilities}
     assert "supportsReasoning" in _fields(t.ModelCapabilities)
+    # The top-level HDR objects (spec 20261121) took the generator's bare
+    # ``Capabilities`` / ``Settings`` names; pin them to ModelResponse too.
+    fields = t.ModelResponse.model_fields
+    assert _members(fields["capabilities"].annotation) == {t.VideoModelCapabilities}
+    assert _members(fields["settings"].annotation) == {t.VideoModelSettings}
 
 
 def test_model_type_is_the_model_kind_enum():
@@ -145,6 +157,8 @@ def test_aliases_are_exported():
         "ModelPricing",
         "TextModelConstraints",
         "InpaintModelPricing",
+        "VideoModelCapabilities",
+        "VideoModelSettings",
     ):
         assert name in t.__all__
     assert isinstance(t.ModelPricing, _pytypes.UnionType)
@@ -177,3 +191,41 @@ def test_parsed_data_narrows_with_public_aliases():
     assert spec is not None
     assert isinstance(spec.pricing, t.ImageModelPricing)
     assert isinstance(spec.constraints, t.ImageModelConstraints)
+
+
+def test_parsed_data_exposes_video_hdr_fields():
+    # Shape from spec 20261121: HDR support is published both top-level
+    # (capabilities / settings) and on the video constraints.
+    record = {
+        "created": 1727966436,
+        "id": "hdr-video",
+        "object": "model",
+        "owned_by": "venice.ai",
+        "type": "video",
+        "capabilities": {"supportsHdr": True},
+        "settings": {"hdrResolutions": ["1080p", "4k"]},
+        "model_spec": {
+            "privacy": "private",
+            "constraints": {
+                "model_type": "text-to-video",
+                "aspect_ratios": ["16:9"],
+                "resolutions": ["720p", "1080p", "4k"],
+                "durations": ["5s"],
+                "audio": False,
+                "audio_configurable": False,
+                "per_reference_audio": False,
+                "supportsHdr": True,
+                "hdrResolutions": ["1080p", "4k"],
+            },
+        },
+    }
+    parsed = t.ModelList(data=[record]).parsed_data()[0]
+    assert isinstance(parsed.capabilities, t.VideoModelCapabilities)
+    # ``enum: [true]`` in the spec → a one-member enum, not a bool: truthy, ``.value is True``.
+    assert parsed.capabilities.supportsHdr and parsed.capabilities.supportsHdr.value is True
+    assert isinstance(parsed.settings, t.VideoModelSettings)
+    assert parsed.settings.hdrResolutions == ["1080p", "4k"]
+    assert parsed.model_spec is not None
+    constraints = parsed.model_spec.constraints
+    assert isinstance(constraints, t.VideoModelConstraints)
+    assert constraints.supportsHdr is True and constraints.hdrResolutions == ["1080p", "4k"]

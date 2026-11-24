@@ -33,6 +33,7 @@ from veniceresch._generated import (
     BillingUsageAnalyticsResponse,
     BillingUsageHistoryResponse,
     Capabilities,
+    Capabilities1,
     Constraints,
     Constraints1,
     Constraints2,
@@ -51,6 +52,7 @@ from veniceresch._generated import (
     Pricing7,
     Pricing8,
     ResponsesResponse,
+    Settings,
     SimpleGenerateImageRequest,
     WebScrapeRequest,
     WebScrapeResponse,
@@ -145,8 +147,18 @@ class ResponsesChunk(VeniceBaseModel):
 #     if isinstance(spec.pricing, TextModelPricing):
 #         spec.pricing.input.usd
 
-ModelCapabilities = Capabilities
+ModelCapabilities = Capabilities1
 """``model_spec.capabilities`` (text-model capabilities: ``supportsReasoning``, …)."""
+
+VideoModelCapabilities = Capabilities
+"""Top-level ``ModelResponse.capabilities``: ``supportsHdr`` (video models with HDR only).
+
+The object is omitted for models without HDR, so ``model.capabilities is not None``
+is the check. ``supportsHdr`` itself is a one-member enum (the spec says
+``enum: [true]``): truthy, with ``.value is True``; don't compare it ``is True``.
+"""
+VideoModelSettings = Settings
+"""Top-level ``ModelResponse.settings``: ``hdrResolutions`` (video models with HDR only)."""
 
 ModelType = _ModelKind
 """The model kind on ``ModelResponse.type``: ``text``, ``image``, ``tts``, ``video``, …"""
@@ -940,7 +952,9 @@ __all__ = [
     "TtsModelPricing",
     "VeniceBaseModel",
     "VideoCompleteResponse",
+    "VideoModelCapabilities",
     "VideoModelConstraints",
+    "VideoModelSettings",
     "VideoModelType",
     "VideoQueueResponse",
     "VideoQuoteResponse",

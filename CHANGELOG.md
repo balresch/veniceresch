@@ -22,14 +22,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   request's `format` (used only if it is plain letters/digits, since the
   server echoes it into a file name), else `bin`. It creates the directory if
   needed. Both are blocking; async callers can use `asyncio.to_thread`.
+- **Video HDR** (spec `20261121`): `video.queue()` / `video.quote()` take
+  `hdr=`. It works on models whose `/models` entry has
+  `capabilities.supportsHdr`, at a resolution in `settings.hdrResolutions`.
+  Venice answers 400 otherwise, and the HDR rate is only available from a
+  quote. New public aliases for the new top-level model-list objects:
+  `VideoModelCapabilities` (`supportsHdr`) and `VideoModelSettings`
+  (`hdrResolutions`); `VideoModelConstraints` gains `supportsHdr` /
+  `hdrResolutions`. Note that `VideoModelCapabilities.supportsHdr` is a
+  one-member enum (the spec says `enum: [true]`), not a `bool`: check
+  `model.capabilities is not None`, or its truthiness.
+- New spec fields that need no wrapper change: `extra_content`
+  (`google.thought_signature`) on assistant messages, both sent and received;
+  `cache_creation_5m_input_tokens`, `cache_creation_1h_input_tokens` and
+  `cache_write_tokens` in chat `usage.prompt_tokens_details`; `cache_write_1h`
+  on `TextModelPricing` (and its `extended` tier).
 
 ### Changed
 
-- Synced to Venice API spec `20261116` (was `20261113`). Documentation only:
-  the x402 sign-in 401 on `/x402/balance` and `/x402/transactions` can now
-  also carry `code: "X402_USER_NOT_ALLOWED"` (the wallet's Venice account is
-  banned or deleted). It still raises `VeniceAuthError` with the code on
-  `error_body`. No generated types changed.
+- Synced to Venice API spec `20261123` (was `20261113`). Besides the
+  additions above:
+  - `image.generate()`: `width` / `height` go up to 4096 (was 1280). The SDK
+    never enforced the limit.
+  - `image.edit()` / `image.multi_edit()`: four more edit models in the
+    spec's list (`ideogram-v4-6-edit`, `kling-v4-image-edit`,
+    `mai-image-2-7-edit`, `mai-image-2-7-flash-edit`). `model` was already a
+    plain `str`.
+  - x402 wallet auth (`SIGN-IN-WITH-X`) is no longer accepted on `/video/*`
+    and `/audio/voice-changer/*`; they need an API key. The SDK never offered
+    wallet auth on those methods, so nothing changes for callers.
+  - The x402 sign-in 401 on `/x402/balance` and `/x402/transactions` can also
+    carry `code: "X402_USER_NOT_ALLOWED"` (the wallet's Venice account is
+    banned or deleted). It still raises `VeniceAuthError` with the code on
+    `error_body`.
+  - Internal: the regen gave the generator's bare `Capabilities` name to the
+    new top-level HDR object, so the public `veniceresch.types.ModelCapabilities`
+    alias (`model_spec.capabilities`) was re-bound to `Capabilities1`. Nothing
+    changes for callers; the alias guard test caught it.
 
 ### Documentation
 
@@ -44,6 +73,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
   format: png, jpeg, webp) asserts `save_all()` picks the extension from the
   real payload's magic bytes; the paid image-edit check now also round-trips
   `ImageBytes.save()`.
+- New free-tier live check `test_video_quote_hdr`: finds a video model that
+  advertises HDR, checks its `/models` entry parses to the new aliases, and
+  quotes it with and without `hdr=True`.
 
 ## [0.10.0] — 2026-11-16
 

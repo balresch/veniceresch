@@ -503,7 +503,7 @@ class CacheControl(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -549,7 +549,7 @@ class CacheControl1(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -579,7 +579,7 @@ class ImageUrl(VeniceBaseModel):
     url: Annotated[
         AnyUrl,
         Field(
-            description="The URL of the image. Can be a data URL with a base64 encoded image or a public URL. URL must be publicly accessible. Image must pass validation checks and be >= 64 pixels square."
+            description="The URL of the image. Can be a data URL with a base64 encoded image or a public URL. URL must be publicly accessible. Image must pass validation checks."
         ),
     ]
 
@@ -615,7 +615,7 @@ class CacheControl2(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -687,7 +687,7 @@ class CacheControl3(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -740,7 +740,7 @@ class CacheControl4(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -810,7 +810,7 @@ class CacheControl5(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -827,7 +827,7 @@ class CacheControl6(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -865,6 +865,14 @@ class ContentItem(VeniceBaseModel):
     type: Annotated[Type14, Field(title="Text Content String")]
 
 
+class Google(VeniceBaseModel):
+    thought_signature: str | None = None
+
+
+class ExtraContent(VeniceBaseModel):
+    google: Google | None = None
+
+
 class ReasoningDetail(VeniceBaseModel):
     data: str | None = None
     format: str | None = None
@@ -888,6 +896,12 @@ class Messages1(VeniceBaseModel):
         ),
     ] = None
     content: str | list[ContentItem] | Any | None = None
+    extra_content: Annotated[
+        ExtraContent | None,
+        Field(
+            description="Provider-specific message content. `google.thought_signature` carries the same Gemini thought signature as the top-level `thought_signature` field; pass back either one exactly as received."
+        ),
+    ] = None
     name: str | None = None
     reasoning_content: str | None = None
     reasoning_details: Annotated[
@@ -914,7 +928,7 @@ class CacheControl7(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -952,7 +966,7 @@ class CacheControl8(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -1008,7 +1022,7 @@ class CacheControl9(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -1556,7 +1570,7 @@ class CacheControl10(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -1616,7 +1630,7 @@ class CacheControl11(VeniceBaseModel):
     ttl: Annotated[
         str | None,
         Field(
-            description="Optional TTL for extended cache duration. Beta feature requiring special header.",
+            description='Optional cache lifetime: "5m" (the default) or "1h". One-hour writes are billed at the model\'s cache_write_1h rate when its pricing lists one, and usage reports them as cache_creation_1h_input_tokens.',
             examples=["1h"],
         ),
     ] = None
@@ -2853,7 +2867,12 @@ class GenerateImageRequest(VeniceBaseModel):
     ] = "webp"
     height: Annotated[
         int | None,
-        Field(description="Height of the generated image.", examples=[1024], gt=0, le=1280),
+        Field(
+            description="Height of the generated image, in pixels (max 4096). For models that list aspect ratios, width and height select the nearest aspect_ratio and a resolution tier (long edge above 1536 → 2K, above 3072 → 4K; the highest offered tier at or below that, otherwise the model default). An explicit aspect_ratio or resolution overrides only its own value. For models that render an exact canvas, each side must be at most 1280 before any model upscale.",
+            examples=[1024],
+            gt=0,
+            le=4096,
+        ),
     ] = 1024
     hide_watermark: Annotated[
         bool | None,
@@ -2999,7 +3018,12 @@ class GenerateImageRequest(VeniceBaseModel):
     ] = None
     width: Annotated[
         int | None,
-        Field(description="Width of the generated image.", examples=[1024], gt=0, le=1280),
+        Field(
+            description="Width of the generated image, in pixels (max 4096). For models that list aspect ratios, width and height select the nearest aspect_ratio and a resolution tier (long edge above 1536 → 2K, above 3072 → 4K; the highest offered tier at or below that, otherwise the model default). An explicit aspect_ratio or resolution overrides only its own value. For models that render an exact canvas, each side must be at most 1280 before any model upscale.",
+            examples=[1024],
+            gt=0,
+            le=4096,
+        ),
     ] = 1024
     style_references: Annotated[
         list[StyleReference] | None,
@@ -4450,6 +4474,13 @@ class QueueVideoRequest(VeniceBaseModel):
             examples=[True],
         ),
     ] = True
+    hdr: Annotated[
+        bool | None,
+        Field(
+            description="When true, generate HDR. Defaults to false. Returns 400 when the model does not support HDR or the resolution is not listed in GET /models constraints.hdrResolutions.",
+            examples=[False],
+        ),
+    ] = None
     camera_trajectory: Annotated[
         list[CameraTrajectoryItem] | None,
         Field(
@@ -4685,6 +4716,13 @@ class QuoteVideoRequest(VeniceBaseModel):
             examples=[True],
         ),
     ] = True
+    hdr: Annotated[
+        bool | None,
+        Field(
+            description="When true, quote HDR. Defaults to false. Returns 400 when the model does not support HDR or the resolution is not listed in GET /models constraints.hdrResolutions. The surcharge is per output second and is not applied to input seconds.",
+            examples=[False],
+        ),
+    ] = None
     video_url: Annotated[
         str | None,
         Field(
@@ -5450,6 +5488,30 @@ class WebSearchRequest(VeniceBaseModel):
     ] = None
 
 
+class SupportsHdr(Enum):
+    boolean_True = True
+
+
+class Capabilities(VeniceBaseModel):
+    supportsHdr: Annotated[
+        SupportsHdr,
+        Field(
+            description="When true, quote and queue accept `hdr`. Allowed resolutions are `settings.hdrResolutions`. Present only for video models that support HDR. The HDR rate is not on this payload; price it with POST /video/quote.",
+            examples=[True],
+        ),
+    ]
+
+
+class Settings(VeniceBaseModel):
+    hdrResolutions: Annotated[
+        list[str],
+        Field(
+            description="Resolutions that accept `hdr: true`. Present together with `capabilities.supportsHdr`.",
+            examples=[["1080p", "4k"]],
+        ),
+    ]
+
+
 class Privacy(Enum):
     private = "private"
     anonymized = "anonymized"
@@ -5523,7 +5585,7 @@ class DefaultReasoningEffort(Enum):
     max = "max"
 
 
-class Capabilities(VeniceBaseModel):
+class Capabilities1(VeniceBaseModel):
     optimizedForCode: Annotated[
         bool, Field(description="Is the LLM optimized for coding?", examples=[True])
     ]
@@ -5853,6 +5915,20 @@ class Constraints2(VeniceBaseModel):
             examples=[["1080p", "720p", "480p"]],
         ),
     ]
+    supportsHdr: Annotated[
+        bool | None,
+        Field(
+            description="When true, quote and queue accept `hdr`. Allowed resolutions are `hdrResolutions`. Absent when the model does not support HDR. The HDR rate is not on this payload; price it with POST /video/quote.",
+            examples=[True],
+        ),
+    ] = None
+    hdrResolutions: Annotated[
+        list[str] | None,
+        Field(
+            description="Resolutions that accept `hdr: true`. Present when `supportsHdr` is true.",
+            examples=[["1080p", "4k"]],
+        ),
+    ] = None
     durations: Annotated[
         list[str],
         Field(
@@ -6007,6 +6083,23 @@ class CacheWrite(VeniceBaseModel):
     ]
 
 
+class CacheWrite1h(VeniceBaseModel):
+    usd: Annotated[
+        float,
+        Field(
+            description="USD cost per million cache creation tokens written with a one-hour TTL.",
+            examples=[12],
+        ),
+    ]
+    diem: Annotated[
+        float,
+        Field(
+            description="Diem cost per million cache creation tokens written with a one-hour TTL.",
+            examples=[12],
+        ),
+    ]
+
+
 class Output6(VeniceBaseModel):
     usd: Annotated[float, Field(description="USD cost per million output tokens", examples=[2.8])]
     diem: Annotated[float, Field(description="Diem cost per million output tokens", examples=[28])]
@@ -6080,6 +6173,23 @@ class CacheWrite1(VeniceBaseModel):
     ]
 
 
+class CacheWrite1h1(VeniceBaseModel):
+    usd: Annotated[
+        float,
+        Field(
+            description="USD cost per million one-hour cache write tokens (extended tier)",
+            examples=[22],
+        ),
+    ]
+    diem: Annotated[
+        float,
+        Field(
+            description="Diem cost per million one-hour cache write tokens (extended tier)",
+            examples=[22],
+        ),
+    ]
+
+
 class Extended(VeniceBaseModel):
     context_token_threshold: Annotated[
         float,
@@ -6092,6 +6202,7 @@ class Extended(VeniceBaseModel):
     output: Output7
     cache_input: CacheInput1 | None = None
     cache_write: CacheWrite1 | None = None
+    cache_write_1h: CacheWrite1h1 | None = None
 
 
 class Pricing(VeniceBaseModel):
@@ -6106,6 +6217,12 @@ class Pricing(VeniceBaseModel):
         CacheWrite | None,
         Field(
             description="Optional pricing for cache creation tokens (cache writes). Only present for models where provider charges for cache writes (e.g., Anthropic charges 1.25x input price)."
+        ),
+    ] = None
+    cache_write_1h: Annotated[
+        CacheWrite1h | None,
+        Field(
+            description='Optional pricing for cache writes made with cache_control ttl "1h" (Anthropic charges 2x input price). Only present for models that price one-hour writes separately; cache_write then covers five-minute writes.'
         ),
     ] = None
     output: Output6
@@ -6480,7 +6597,7 @@ class ModelSpec(VeniceBaseModel):
         ),
     ] = None
     capabilities: Annotated[
-        Capabilities | None, Field(description="Text model specific capabilities.")
+        Capabilities1 | None, Field(description="Text model specific capabilities.")
     ] = None
     constraints: Annotated[
         Constraints | Constraints1 | Constraints2 | Constraints3 | None,
@@ -6818,6 +6935,16 @@ class ModelResponse(VeniceBaseModel):
         ),
     ] = None
     id: Annotated[str, Field(description="Model ID", examples=["gemini-4-carbon"])]
+    capabilities: Annotated[
+        Capabilities | None,
+        Field(description="Video HDR capability. Omitted when the model does not support HDR."),
+    ] = None
+    settings: Annotated[
+        Settings | None,
+        Field(
+            description="Video settings published on the model list. Present only when the model supports HDR."
+        ),
+    ] = None
     model_spec: ModelSpec
     object: Annotated[Object1, Field(description="Object type", examples=["model"])]
     owned_by: Annotated[OwnedBy, Field(description="Who runs the model", examples=["venice.ai"])]

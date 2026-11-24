@@ -576,3 +576,23 @@ async def test_retrieve_parses_draft_fields(mock_api, async_client):
     )
     result = await async_client.video.retrieve(queue_id="q1")
     assert result.draft_task_id == "q1" and result.can_upgrade_to_hd is False
+
+
+# ---- HDR (spec 20261121) ---------------------------------------------------
+
+
+@pytest.mark.parametrize(("method", "path"), [("queue", "/video/queue"), ("quote", "/video/quote")])
+@pytest.mark.parametrize("hdr", [True, False])
+async def test_hdr_is_forwarded(mock_api, async_client, sync_client, method, path, hdr):
+    route = mock_api.post(path).respond(200, json={"model": "m", "queue_id": "q", "quote": 1.0})
+    expected = {"model": "m", "resolution": "1080p", "hdr": hdr}
+    await getattr(async_client.video, method)(model="m", resolution="1080p", hdr=hdr)
+    assert json.loads(route.calls.last.request.content) == expected
+    getattr(sync_client.video, method)(model="m", resolution="1080p", hdr=hdr)
+    assert json.loads(route.calls.last.request.content) == expected
+
+
+async def test_hdr_omitted_by_default(mock_api, async_client):
+    route = mock_api.post("/video/queue").respond(200, json={"model": "m", "queue_id": "q"})
+    await async_client.video.queue(model="m", prompt="p")
+    assert "hdr" not in json.loads(route.calls.last.request.content)
