@@ -152,6 +152,7 @@ class AsyncVideoResource:
         duration: str | None = None,
         draft: bool | None = None,
         draft_task_id: str | None = None,
+        hdr: bool | None = None,
         **extra: Any,
     ) -> VideoQueueResponse:
         """Queue a video job. Returns a :class:`VideoQueueResponse` with ``queue_id``.
@@ -163,6 +164,11 @@ class AsyncVideoResource:
         ``draft=True`` renders a fast 480p draft; the response carries
         ``draft_task_id``. Queue again with ``draft_task_id=...`` (and no
         ``draft``) to upgrade it to HD before ``draft_expires_at``.
+
+        ``hdr=True`` renders HDR on models whose ``/models`` entry has
+        ``capabilities.supportsHdr``, at a resolution listed in
+        ``settings.hdrResolutions``; Venice answers 400 otherwise. Quote it
+        first: the HDR rate isn't in the model list.
         """
         body = _drop_none(
             {
@@ -170,6 +176,7 @@ class AsyncVideoResource:
                 "prompt": prompt,
                 "duration": duration,
                 **_draft_fields(draft, draft_task_id),
+                "hdr": hdr,
                 **extra,
             }
         )
@@ -279,12 +286,20 @@ class AsyncVideoResource:
         duration: str | None = None,
         draft: bool | None = None,
         draft_task_id: str | None = None,
+        hdr: bool | None = None,
         **extra: Any,
     ) -> VideoQuoteResponse:
         """Price a video job. ``draft`` / ``draft_task_id`` quote a draft or its
-        HD upgrade (see :meth:`queue`); other fields go through ``**extra``."""
+        HD upgrade and ``hdr`` an HDR render (see :meth:`queue`); other fields
+        go through ``**extra``."""
         body = _drop_none(
-            {"model": model, "duration": duration, **_draft_fields(draft, draft_task_id), **extra}
+            {
+                "model": model,
+                "duration": duration,
+                **_draft_fields(draft, draft_task_id),
+                "hdr": hdr,
+                **extra,
+            }
         )
         raw = await self._client._request_json("POST", "/video/quote", json_body=body)
         return VideoQuoteResponse.model_validate(raw)
@@ -369,6 +384,7 @@ class VideoResource:
         duration: str | None = None,
         draft: bool | None = None,
         draft_task_id: str | None = None,
+        hdr: bool | None = None,
         **extra: Any,
     ) -> VideoQueueResponse:
         """Sync mirror of :meth:`AsyncVideoResource.queue`."""
@@ -378,6 +394,7 @@ class VideoResource:
                 "prompt": prompt,
                 "duration": duration,
                 **_draft_fields(draft, draft_task_id),
+                "hdr": hdr,
                 **extra,
             }
         )
@@ -462,11 +479,18 @@ class VideoResource:
         duration: str | None = None,
         draft: bool | None = None,
         draft_task_id: str | None = None,
+        hdr: bool | None = None,
         **extra: Any,
     ) -> VideoQuoteResponse:
         """Sync mirror of :meth:`AsyncVideoResource.quote`."""
         body = _drop_none(
-            {"model": model, "duration": duration, **_draft_fields(draft, draft_task_id), **extra}
+            {
+                "model": model,
+                "duration": duration,
+                **_draft_fields(draft, draft_task_id),
+                "hdr": hdr,
+                **extra,
+            }
         )
         raw = self._client._request_json("POST", "/video/quote", json_body=body)
         return VideoQuoteResponse.model_validate(raw)

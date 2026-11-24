@@ -301,6 +301,21 @@ Attribute access everywhere — ``queued.queue_id`` and
 that take a `video_url` plus `enhancement_model`, `target_fps`,
 `slowdown_factor`, … (all forwarded via `**extra`).
 
+Two typed options change what gets rendered:
+
+- `draft=True` (models with `supportsDraftMode`) renders a fast 480p draft.
+  Queue again with `draft_task_id=` to upgrade it to HD.
+- `hdr=True` (models whose `/models` entry has `capabilities.supportsHdr`)
+  renders HDR at a resolution from `settings.hdrResolutions`. The HDR rate
+  isn't in the model list, so quote it first:
+
+```python
+for m in (await client.models.list(type="video")).parsed_data():
+    if m.capabilities is not None and m.settings is not None:  # HDR-capable
+        res = m.settings.hdrResolutions[0]
+        quote = await client.video.quote(model=m.id, duration="5s", resolution=res, hdr=True)
+```
+
 `video.transcribe()` is **deprecated**: Venice retired `/video/transcriptions`
 (HTTP 410). It now raises `VeniceGoneError` without a network call. For video
 analysis use `chat.create(...)` with a `video_url` content part on a model
@@ -415,7 +430,9 @@ Pricing variants: `TextModelPricing`, `ImageModelPricing`, `TtsModelPricing`,
 `AsrModelPricing`, `InpaintModelPricing`, `MusicGenerationPricing`,
 `MusicPerSecondPricing`, `DurationTierPricing`, `PerThousandCharactersPricing`
 (union: `ModelPricing`). Also `ModelSpec`, `ModelCapabilities`, `ModelType`
-(the model kind) and `VideoModelType` (`text-to-video` / `image-to-video`).
+(the model kind), `VideoModelType` (`text-to-video` / `image-to-video`), and
+`VideoModelCapabilities` / `VideoModelSettings` for the top-level HDR fields
+on video models.
 Import these rather than the numbered `Constraints1` / `Pricing4` classes in
 `_generated`, whose names can shift when the spec is regenerated.
 
@@ -781,7 +798,7 @@ Run `bash scripts/regen_types.sh` with the venv active too (it uses
 | x402 | `/x402/balance/{walletAddress}`, `/x402/top-up`, `/x402/transactions/{walletAddress}` | — |
 | crypto | `/crypto/rpc/networks`, `/crypto/rpc/{network}` (JSON-RPC proxy) | — |
 
-All 49 live paths in Venice's current OpenAPI spec (`20261116`) are covered
+All 49 live paths in Venice's current OpenAPI spec (`20261123`) are covered
 (`/systemone` via its `/decisions` alias). The two retired paths keep
 deprecated stubs that raise `VeniceGoneError` and go away in 1.0. The x402 and
 web3 endpoints use wallet-based auth — this SDK accepts the signed header
